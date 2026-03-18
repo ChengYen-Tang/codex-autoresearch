@@ -5,6 +5,7 @@
 [Codex](https://openai.com/codex) 的自主迭代协议。定义目标、指标和验证命令 -- Codex 处理剩下的一切。
 
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-blue?logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
+[![GitHub Stars](https://img.shields.io/github/stars/leo-lilinxiao/codex-autoresearch?style=social)](https://github.com/leo-lilinxiao/codex-autoresearch)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [架构](#架构) . [30秒上手](#30秒上手) . [模式](#模式) . [配置](#配置) . [操作手册](GUIDE.md) . [配方集](EXAMPLES.md)
@@ -445,6 +446,18 @@ codex-autoresearch/
 ## 致谢
 
 本项目基于 [Karpathy 的 autoresearch](https://github.com/karpathy/autoresearch) 的理念构建。Codex skills 平台由 [OpenAI](https://openai.com) 提供。
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=leo-lilinxiao%2Fcodex-autoresearch&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&legend=top-left" />
+ </picture>
+</a>
 
 ---
 

@@ -5,6 +5,7 @@
 Autonomous iteration protocol for [Codex](https://openai.com/codex). Define a goal, a metric, and a verify command -- Codex handles the rest.
 
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-blue?logo=openai&logoColor=white)](https://developers.openai.com/codex/skills)
+[![GitHub Stars](https://img.shields.io/github/stars/leo-lilinxiao/codex-autoresearch?style=social)](https://github.com/leo-lilinxiao/codex-autoresearch)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 [Architecture](#architecture) . [30-Second Start](#30-second-start) . [Modes](#modes) . [Configuration](#configuration) . [Guide](GUIDE.md) . [Recipes](EXAMPLES.md)
@@ -445,6 +446,18 @@ codex-autoresearch/
 ## Acknowledgments
 
 This project builds on ideas from [Karpathy's autoresearch](https://github.com/karpathy/autoresearch). The Codex skills platform is by [OpenAI](https://openai.com).
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=leo-lilinxiao%2Fcodex-autoresearch&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=leo-lilinxiao/codex-autoresearch&type=timeline&legend=top-left" />
+ </picture>
+</a>
 
 ---
 
