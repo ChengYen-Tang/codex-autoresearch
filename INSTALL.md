@@ -59,8 +59,7 @@ Open Codex in the target repo and verify:
 
 ```text
 $codex-autoresearch
-Mode: plan
-Goal: reduce failing tests to zero
+I want to reduce my failing tests to zero
 ```
 
 Expected behavior:

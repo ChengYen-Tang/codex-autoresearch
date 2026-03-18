@@ -83,7 +83,7 @@ Run the guard if configured.
 ### Phase 7: Decide
 
 - improved + guard passed -> keep
-- improved + guard failed -> rework (up to 2 attempts), then discard. Rollback follows the generic loop: prefer `git reset --hard HEAD~1`, fall back to `git revert`.
+- improved + guard failed -> rework (up to 2 attempts), then discard. Rollback follows the generic loop: prefer `git reset --hard HEAD~1`, fall back to `git revert --no-edit HEAD`.
 - unchanged -> discard
 - worse -> discard immediately
 - crash -> recover or discard

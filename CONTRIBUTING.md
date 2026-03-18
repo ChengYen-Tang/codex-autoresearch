@@ -1,157 +1,143 @@
-# Contributing
+# Contributing to codex-autoresearch
 
-codex-autoresearch is a Markdown-first skill package. Everything is `.md` files -- no build step, no compilation.
+This project is a collection of Markdown files that together form a Codex skill. There is no code to compile, no tests to run, no dependencies to install. You edit `.md` files, point Codex at the skill directory, and observe behavior.
 
----
+## How the skill is structured
 
-## Setup for Development
+Codex loads `SKILL.md` first. That file contains mode routing, hard rules, and a load order that pulls in reference files on demand:
+
+```
+SKILL.md  (always loaded -- entrypoint)
+  |
+  +-- references/core-principles.md         (always loaded)
+  +-- references/structured-output-spec.md  (always loaded)
+  +-- references/autonomous-loop-protocol.md (loaded for iterating modes)
+  +-- references/interaction-wizard.md       (loaded when fields are missing)
+  +-- references/{mode}-workflow.md          (loaded per mode)
+  +-- references/results-logging.md          (loaded when logging is needed)
+  +-- references/modes.md                    (mode index)
+```
+
+This progressive disclosure means Codex only reads what it needs. A loop-mode invocation never loads the ship workflow. A plan-mode invocation never loads the results log spec.
+
+The user-facing documentation lives in separate files:
+
+```
+README.md / README_ZH.md   -- public overview
+GUIDE.md                   -- operator's manual
+EXAMPLES.md                -- real-world recipes
+INSTALL.md                 -- installation options
+```
+
+## Development workflow
+
+1. Fork and clone the repo.
+
+2. Symlink into a test project so edits take effect immediately:
 
 ```bash
-# clone
-git clone https://github.com/leo-lilinxiao/codex-autoresearch.git
-cd codex-autoresearch
-
-# symlink into a test project for live editing
-ln -s $(pwd) your-project/.agents/skills/codex-autoresearch
-
-# verify: open Codex in the test project, type $, confirm the skill appears
+ln -s /path/to/your/fork your-project/.agents/skills/codex-autoresearch
 ```
 
-When done, replace the symlink with a copy if needed:
-```bash
-rm your-project/.agents/skills/codex-autoresearch
-cp -r codex-autoresearch your-project/.agents/skills/codex-autoresearch
-```
+3. Open Codex in the test project, type `$codex-autoresearch`, and verify the skill activates.
 
----
+4. Make your changes. Test by invoking the skill in different scenarios.
 
-## Codebase Map
+5. When satisfied, remove the symlink and submit a PR.
 
-```
-SKILL.md                         <- skill entrypoint, mode routing, hard rules
-references/
-  autonomous-loop-protocol.md    <- how the loop works (8 phases)
-  core-principles.md             <- universal principles
-  {mode}-workflow.md             <- per-mode specification
-  interaction-wizard.md          <- interactive field collection
-  structured-output-spec.md      <- output format contract
-  modes.md                       <- mode index
-  results-logging.md             <- TSV log format
-agents/openai.yaml               <- Codex UI metadata (optional)
-scripts/validate_skill_structure.sh  <- structure checker
-```
+## Where to make changes
 
-### Ownership
+The project has two layers: the **skill layer** (what Codex reads) and the **documentation layer** (what humans read). Changes often touch both.
 
-| File | Owns | Touch when |
-|------|------|------------|
-| `SKILL.md` | Mode routing, activation triggers, hard rules | Adding/changing modes, changing defaults |
-| `references/*-workflow.md` | Full behavior spec for one mode | Changing how a mode works |
-| `references/autonomous-loop-protocol.md` | The 8-phase loop | Changing loop mechanics |
-| `references/interaction-wizard.md` | Field collection UX | Changing setup flow |
-| `references/structured-output-spec.md` | Output shapes | Changing what gets produced |
-| `agents/openai.yaml` | UI display metadata | Changing how skill appears in Codex UI |
-| `README.md` / `README_ZH.md` | Public-facing overview | Any user-visible change |
-| `GUIDE.md` | Operator's manual | Any behavioral or config change |
-| `EXAMPLES.md` | Copy-paste recipes | New domains, new patterns |
+**Skill layer -- how Codex behaves:**
 
----
+| If you want to change... | Edit this file |
+|--------------------------|---------------|
+| Which modes exist, how they route | `SKILL.md` |
+| How the core loop works (phases, rollback, stuck recovery) | `references/autonomous-loop-protocol.md` |
+| How Codex asks users for information before starting | `references/interaction-wizard.md` |
+| How a specific mode behaves | `references/{mode}-workflow.md` |
+| What output gets produced | `references/structured-output-spec.md` |
+| Universal design principles | `references/core-principles.md` |
+| TSV log format | `references/results-logging.md` |
 
-## How to Add a New Mode
+**Documentation layer -- what humans see:**
 
-1. **Write the spec**: create `references/yourmode-workflow.md` with full protocol, phases, rules, flags, error handling, and output format.
+| If you want to change... | Edit this file |
+|--------------------------|---------------|
+| The project overview and quick start | `README.md` + `README_ZH.md` |
+| Detailed usage instructions | `GUIDE.md` |
+| Copy-paste recipes and worked examples | `EXAMPLES.md` |
+| Installation methods | `INSTALL.md` |
 
-2. **Register in SKILL.md**: add to the modes table and the "When Activated" classification list.
+When a skill-layer change affects user-visible behavior, update the documentation layer too.
 
-3. **Update the index**: add to `references/modes.md`.
+## Adding a new mode
 
-4. **Update wizard**: add mode-specific fields to `references/interaction-wizard.md` if needed.
+1. Create `references/yourmode-workflow.md`. Include: purpose, trigger phrases, phases with rules, output format, and a two-phase boundary statement at the top.
 
-5. **Update output spec**: add output template to `references/structured-output-spec.md`.
+2. Add the mode to the table in `SKILL.md` and to the classification list in "When Activated."
 
-6. **Update docs**: add to README.md, README_ZH.md, GUIDE.md, EXAMPLES.md.
+3. Add it to `references/modes.md` and update the Shared Expectations list if needed.
 
----
+4. Add field mappings to `references/interaction-wizard.md` so the wizard knows how to guide users into this mode.
 
-## Commit Conventions
+5. Add a section to `README.md`, `README_ZH.md`, `GUIDE.md`, and at least one recipe to `EXAMPLES.md`.
 
-[Conventional commits](https://www.conventionalcommits.org/):
+6. Run `bash scripts/validate_skill_structure.sh` to verify the file structure.
 
-| Prefix | Use for |
-|--------|---------|
-| `feat:` | New mode, new feature |
-| `fix:` | Bug fix |
-| `docs:` | Documentation only |
-| `refactor:` | Restructuring without behavior change |
-| `chore:` | Tooling, config, maintenance |
+## Submitting a PR
 
----
+Use [conventional commit](https://www.conventionalcommits.org/) format for titles:
 
-## Pull Requests
+- `feat:` -- new functionality (mode, feature, recipe)
+- `fix:` -- corrects wrong behavior in skill instructions
+- `docs:` -- documentation-only changes
+- `refactor:` -- reorganizes content without changing behavior
 
-- One PR per logical change
-- Branch from `main`, target `main`
-- Use conventional commit format for the title
-- Explain what changed, why, and how to test
-- Update all affected docs (see ownership table above)
-- Do not bump versions -- maintainers handle that
+In the PR body, explain what changed and how to test it. A good test is: symlink the branch into a project, invoke `$codex-autoresearch` with a relevant prompt, and observe whether Codex follows the updated instructions.
 
-### PR body template
+Keep PRs focused. One logical change per PR.
 
-```
-## What changed
-- ...
+## What makes a good contribution
 
-## Files touched
-| File | Change |
-|------|--------|
-| ... | ... |
+**High-value contributions:**
 
-## How to test
-1. Symlink skill into a test project
-2. Invoke: $codex-autoresearch Mode: ...
-3. Verify: ...
-```
+- Recipes for domains not yet covered in EXAMPLES.md
+- Improvements to the interaction wizard (better questions, better defaults)
+- Protocol refinements backed by real-world testing (e.g., "the stuck recovery at 5 discards should also count no-ops")
+- Translations of documentation to new languages
+- Bug reports with reproduction steps ("I said X, Codex did Y, expected Z")
 
----
+**Please avoid:**
 
-## Testing
+- Reformatting or restyling existing files without functional changes
+- Adding verbose comments or explanations for self-evident content
+- Bumping version numbers (maintainers handle releases)
 
-No automated tests -- this is Markdown instructions. Testing means using the skill:
-
-1. Symlink your working tree into a test project
-2. Open Codex
-3. Invoke the skill with different configs
-4. Verify behavior matches your changes
-5. Try edge cases: empty scope, missing fields, failing guard
-
-Run the structure validator:
+## Validating your changes
 
 ```bash
 bash scripts/validate_skill_structure.sh
 ```
 
----
+This checks that all required files exist and the SKILL.md frontmatter is valid.
 
-## What to Contribute
+For behavioral validation, there is no automated test suite. The skill is Markdown instructions -- the only way to test is to use it. Symlink your branch, invoke the skill with various prompts, and verify Codex follows the updated instructions.
 
-**Valuable:**
-- New domain recipes (EXAMPLES.md)
-- Bug fixes in loop edge cases
-- New modes with full specs
-- OWASP/STRIDE additions for security mode
-- Protocol improvements (stuck-detection, smarter ideation)
+Edge cases worth trying:
 
-**Please don't:**
-- Formatting-only changes
-- Style/naming convention changes
-- Whitespace edits
-- Comments explaining obvious things
+- Invoke with no context ("$codex-autoresearch" and nothing else) -- does the wizard activate?
+- Invoke with a complete goal -- does the wizard still ask at least one confirming question?
+- Let the loop run for 5+ iterations -- does it behave correctly on keep, discard, and crash?
 
----
+## Architecture decisions to be aware of
 
-## Notes
+- **Progressive disclosure** is intentional. Do not move reference content into SKILL.md. The entrypoint should stay small.
+- **The two-phase boundary** is a core design constraint. Everything before "go" can ask the user. Everything after "go" must be fully autonomous.
+- **Natural language is the primary interface.** Users should never need to know field names or write structured config. The wizard handles translation.
+- **`git reset --hard HEAD~1`** is the primary rollback mechanism. The results TSV is the audit trail.
 
-- `SKILL.md` is the only entrypoint. Codex reads it first; references load on demand.
-- Everything is MIT licensed. Your contributions will be too.
-- Questions or ideas? Open an issue.
+## License
+
+MIT. Contributions are made under the same license.

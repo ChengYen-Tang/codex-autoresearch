@@ -1,12 +1,10 @@
 # Operator's Manual
 
-This document covers everything you need to run codex-autoresearch effectively -- from installation through advanced multi-mode workflows.
+How to get results from codex-autoresearch. Covers installation, the two-phase interaction model, every mode, and practical tips.
 
 ---
 
-## Getting Started
-
-### Install
+## Installation
 
 Clone and copy into your project:
 
@@ -25,336 +23,433 @@ Verify: open Codex in the target repo, type `$`, confirm `codex-autoresearch` ap
 
 See [INSTALL.md](INSTALL.md) for symlink, admin scope, and live-development options.
 
-### Your first run
+---
 
-Just tell Codex what you want:
+## How Interaction Works
 
-```text
-$codex-autoresearch
-Eliminate all Go vet violations in this repo
+Every invocation follows a two-phase model. Understanding these two phases is the single most important thing in this manual.
+
+### Phase 1: Setup (interactive)
+
+You say one sentence. Codex scans the repo, fills in what it can, and asks you to confirm or clarify the rest. This is a conversation -- you can steer it, add constraints, or just say "go."
+
+```
+You:   $codex-autoresearch
+       I want to get rid of all the `any` types in my TypeScript code
+
+Codex: I found 47 `any` occurrences across src/**/*.ts.
+
+       Confirmed:
+       - Target: eliminate `any` types in src/**/*.ts
+       - Metric: `any` count (current: 47), direction: lower
+       - Verify: grep count, Guard: tsc --noEmit
+
+       Need to confirm:
+       - Run until all gone, or cap at N iterations?
+       - Any other safety checks beyond tsc?
+
+       Reply "go" to start, or tell me what to change.
 ```
 
-Codex scans the repo, proposes a metric and verify command, and asks you to confirm before starting. You can also provide structured config if you prefer:
+The wizard runs for at most 5 rounds. It always asks at least one confirming question, even when it could infer everything.
 
-```text
-$codex-autoresearch
-Goal: Eliminate all Go vet violations
-Scope: **/*.go
-Metric: go vet violation count
-Direction: lower
-Verify: go vet ./... 2>&1 | wc -l
-Guard: go test ./...
-```
+### Phase 2: Execution (fully autonomous)
 
-If you are unsure about your goal, use plan mode:
+Once you say "go" (or "start", "launch", or any clear approval), the loop takes over. From this point on, Codex will never pause to ask you anything. If it hits ambiguity, it applies best practices and keeps going. You can walk away, go to sleep, or work on something else.
 
-```text
-$codex-autoresearch
-I want to make our API faster but I don't know where to start
-```
+The only things that stop the loop:
 
-### Bounded vs unbounded
+- You interrupt Codex
+- The iteration cap is reached (if you set one)
+- A hard blocker appears (verify command broken, repo corrupted, disk full, same crash 5+ times)
 
-By default, the loop runs until interrupted. Add `Iterations: N` to cap it:
-
-```text
-$codex-autoresearch
-Goal: Cut Webpack build warnings to zero
-Scope: src/**/*.ts, src/**/*.tsx, webpack.config.*
-Metric: warning count
-Direction: lower
-Verify: npm run build 2>&1 | grep -c "WARNING"
-Guard: npm test
-Iterations: 20
-```
-
-| Scenario | Recommendation |
-|----------|---------------|
-| Overnight improvement session | Unlimited (default) |
-| Quick experiment | `Iterations: 10` |
-| Targeted fix with known scope | `Iterations: 5` |
-| CI/CD pipeline | Set N based on time budget |
+This boundary is absolute. Everything before "go" can ask. Everything after "go" is silent.
 
 ---
 
-## Understanding the Protocol
+## The Iteration Cycle
 
-### Lifecycle of one iteration
+Every iterating mode (loop, debug, fix, security) shares the same cycle:
 
 ```
-  Hypothesis  -->  Modify  -->  Commit  -->  Verify  -->  Guard
-                                                |            |
-                                             improved?    passed?
-                                              |    |      |    |
-                                             yes   no    yes   no
-                                              |    |      |    |
-                                            KEEP  REVERT  ok  rework (2x)
-                                              |               |
-                                              +--- Log -------+
+  Pick hypothesis  -->  Edit files  -->  git commit  -->  Run verify
+                                                             |
+                                                         improved?
+                                                        /         \
+                                                      yes          no
+                                                      /              \
+                                                   KEEP           REVERT
+                                                     \              /
+                                                      +-- Log -----+
+                                                           |
+                                                         repeat
 ```
 
-1. **Hypothesis** -- pick one focused change based on git history and past results
-2. **Modify** -- edit files within the declared scope
-3. **Commit** -- `git commit` before running verification
-4. **Verify** -- run the verify command, extract the metric
-5. **Guard** -- if a guard command is set, run it to check for regressions
-6. **Decide** -- keep (metric improved + guard passed) or revert
-7. **Log** -- append result to TSV log
+1. **Hypothesis** -- one focused idea based on what worked, what failed, what is untried
+2. **Edit** -- change files within the declared scope only
+3. **Commit** -- `git commit` before verification (so revert is always safe)
+4. **Verify** -- run the verify command, extract the metric value
+5. **Guard** -- if set, run the guard command to check for regressions
+6. **Decide** -- metric improved and guard passed = keep; otherwise revert
+7. **Log** -- append result to `research-results.tsv`
 
-### The two gates: Verify and Guard
+Revert uses `git reset --hard HEAD~1`. If that fails for any reason, falls back to `git revert`.
 
-| Gate | Question it answers | Fails means |
-|------|---------------------|-------------|
-| Verify | Did the target metric improve? | Revert the change |
-| Guard | Did anything else break? | Rework the change (up to 2 attempts), then revert |
+### Verify and Guard: two gates, two questions
 
-Use guard when optimizing a metric that could introduce regressions:
+| Gate | Question | On failure |
+|------|----------|------------|
+| Verify | Did the metric improve? | Revert immediately |
+| Guard | Did anything else break? | Rework (up to 2 attempts), then revert |
 
-```text
-Verify: pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'   # track coverage
-Guard: npx tsc --noEmit                                                              # don't break types
+A good pairing answers two different questions:
+
+```
+Verify: pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'
+        ^ "Did coverage go up?"
+
+Guard:  npx tsc --noEmit
+        ^ "Do types still compile?"
 ```
 
-### Required vs optional fields
+Another example:
 
-**Required** (for `loop` mode):
+```
+Verify: node scripts/count-lint-warnings.js
+        ^ "Did warning count go down?"
 
-| Field | What it is |
-|-------|------------|
-| `Goal` | Plain-language description of the target |
-| `Scope` | File globs that Codex may modify |
-| `Metric` | The number being tracked |
-| `Direction` | `higher` or `lower` |
-| `Verify` | Shell command that outputs the metric |
+Guard:  npm run test:unit
+        ^ "Do unit tests still pass?"
+```
 
-**Optional:**
+Guard is optional. Use it when improving one metric could hurt something else.
+
+---
+
+## Configuration Fields
+
+Codex infers these from your natural language input and repo context. You never need to write them -- the wizard handles translation. They are documented here for understanding.
+
+### Required (loop mode)
+
+| Field | What it is | Example |
+|-------|------------|---------|
+| `Goal` | Plain-language target | "Eliminate all type errors" |
+| `Scope` | File globs Codex may modify | `src/**/*.ts` |
+| `Metric` | The number being tracked | type error count |
+| `Direction` | `higher` or `lower` | `lower` |
+| `Verify` | Shell command that outputs the metric | `tsc --noEmit 2>&1 \| wc -l` |
+
+### Optional
 
 | Field | Default | What it does |
 |-------|---------|--------------|
-| `Guard` | none | Regression-prevention command |
+| `Guard` | none | Regression-prevention command that must always pass |
 | `Iterations` | unlimited | Stop after N iterations |
-| `Run tag` | auto-generated | Label for this run |
-| `Stop condition` | none | Custom early-stop rule |
+| `Run tag` | auto-generated | Label for this run in the results log |
+| `Stop condition` | none | Custom early-stop rule (e.g., "stop when metric reaches 0") |
 
-If required fields are missing, an interactive wizard scans the repo and always confirms with you before starting (up to 5 rounds). You never need to know the field names.
+### Bounded vs unbounded runs
 
-### Workspace safety
+By default the loop runs until you interrupt it. Tell Codex to cap it:
 
-The loop commits and reverts repeatedly. This requires a clean workspace.
+```
+You:   Go, but only 10 iterations.
+```
 
-If unrelated uncommitted changes exist:
-- The loop will not start
-- Use `plan` mode instead (read-only)
-- Or isolate the work in a clean branch / worktree
+or:
 
-### Output artifacts
+```
+You:   Run overnight, no limit.
+```
 
-| Mode | Artifact |
-|------|----------|
-| `loop` | `research-results.tsv` |
-| `plan` | Config block printed inline |
-| `debug` | `debug/{YYMMDD}-{HHMM}-{slug}/` |
-| `fix` | `fix/{YYMMDD}-{HHMM}-{slug}/` |
-| `security` | `security/{YYMMDD}-{HHMM}-{slug}/` |
-| `ship` | `ship/{YYMMDD}-{HHMM}-{slug}/` |
+When to use each:
+
+- **Overnight exploration** -- unlimited. Let Codex try dozens of approaches.
+- **Focused fix** -- 5-10 iterations. The problem space is small.
+- **Quick experiment** -- 3-5 iterations. You just want to see if the approach works.
+
+Bounded runs print a final summary comparing baseline to best result.
 
 ---
 
-## Mode Deep Dives
+## Modes
+
+Six modes, one invocation pattern: `$codex-autoresearch` followed by a sentence. Codex auto-detects which mode fits. You can also force a mode by saying it explicitly (e.g., "use debug mode").
 
 ### loop
 
-The default mode. Iterates toward any measurable target.
+The default. Iterates toward a measurable target.
 
-```text
-$codex-autoresearch
-Goal: Cut CI pipeline time from 14 minutes to under 6 minutes
-Scope: .github/workflows/*.yml, jest.config.*, src/**/*.test.ts
-Metric: CI duration in seconds
-Direction: lower
-Verify: time npm test 2>&1 | grep "real"
-Guard: npm test
-Iterations: 15
 ```
+You:   $codex-autoresearch
+       Our TypeScript codebase has 47 `any` types, eliminate them all
 
-**What happens:** Codex reads all in-scope files, measures the baseline (iteration #0), then begins the loop. Each iteration picks one hypothesis, makes one change, verifies, and keeps or reverts.
+Codex: [scans repo, confirms target, asks about iteration cap]
+
+You:   Go, run overnight.
+
+Codex: Starting -- baseline: 47. Iterating until interrupted.
+       ...
+       Iteration 1: replaced any in auth module -> 41 (-6) KEEP
+       Iteration 2: generic wrapper attempt -> 49 (+8) DISCARD
+       Iteration 3: narrowed API handlers -> 38 (-3) KEEP
+       ...
+```
 
 Reference: `references/autonomous-loop-protocol.md`
 
 ### plan
 
-Converts a vague goal into a validated, launch-ready configuration.
+Converts a vague goal into a concrete loop configuration. Use when you know what you want but not how to measure it.
 
-```text
-$codex-autoresearch
-Mode: plan
-Goal: optimize database query performance
+```
+You:   $codex-autoresearch
+       I want to make our API faster but I don't know where to start
+
+Codex: I scanned the repo. API layer is in src/api/ with Express + Prisma.
+
+       Need to confirm:
+       - What matters more: p95 latency, throughput, or cold start?
+       - Should I benchmark the whole API or specific endpoints?
+
+You:   p95 latency, the /search endpoint is the worst.
+
+Codex: [proposes config, dry-runs the verify command, outputs ready-to-use block]
 ```
 
-**Steps:**
-
-1. Scans the repo to understand structure and stack
-2. Proposes a scope (which files to modify)
-3. Proposes a metric and direction
-4. Proposes a verify command
-5. Dry-runs the verify command to confirm it works
-6. Outputs a ready-to-paste config block
-
-Every gate is mechanical -- scope must resolve to real files, verify must produce a number.
+Plan mode is read-only -- it never modifies your code.
 
 Reference: `references/plan-workflow.md`
 
 ### debug
 
-Evidence-driven bug hunting using the scientific method.
+Evidence-driven bug hunting. Each iteration tests one falsifiable hypothesis.
 
-```text
-$codex-autoresearch
-Mode: debug
-Scope: src/api/**/*.ts, src/middleware/**/*.ts
-Symptom: intermittent 503 errors under concurrent requests
-Iterations: 12
+```
+You:   $codex-autoresearch
+       API returns 503 randomly under load, no idea why
+
+Codex: I see connection pooling in src/db/pool.ts, rate limiting in
+       src/middleware/, and 3 async handlers without error boundaries.
+
+       Need to confirm:
+       - When did this start? After a specific change, or always?
+       - If I find the cause, should I also fix it?
+
+You:   Started after the pool refactor last week. Find cause first.
+
+Codex: Starting investigation.
+       ...
+       Hypothesis 1: pool exhaustion under concurrent requests
+         Evidence: pool.ts max=10, /search handler holds 3 connections
+         Result: CONFIRMED -- pool saturates at 4 concurrent /search calls
+       ...
 ```
 
-**What it produces:**
+Debug mode produces a findings directory with confirmed causes, disproven hypotheses, and recommended fixes.
 
-- Confirmed findings with file:line evidence
-- Disproven hypotheses (logged as equally valuable)
-- Reproducible steps for each finding
-- Recommended next actions
+To repair the findings afterward, start a new invocation:
 
-**Flags:**
+```
+You:   $codex-autoresearch
+       Fix the bugs you found in the last debug session
+```
 
-| Flag | Purpose |
-|------|---------|
-| `--fix` | Auto-switch to fix mode after investigation |
-| `--severity <level>` | Minimum severity to report |
+Codex reads the debug output directory and enters fix mode automatically.
 
 Reference: `references/debug-workflow.md`
 
 ### fix
 
-Iteratively repairs errors until the count reaches zero.
+Iteratively repairs errors until the count reaches zero. Auto-detects what is broken (tests, types, lint, build).
 
-```text
-$codex-autoresearch
-Mode: fix
-Target: pytest -q
-Guard: ruff check .
-Scope: tests/**/*.py, src/**/*.py
+```
+You:   $codex-autoresearch
+       pytest is failing, 12 tests broken after the refactor
+
+Codex: I see 12 failures across tests/.
+
+       Confirmed:
+       - Target: make all pytest tests pass
+       - Current: 12 failures
+
+       Need to confirm:
+       - Should I also guard with ruff to avoid introducing lint issues?
+       - Fix all 12, or focus on a specific module first?
+
+You:   Fix all, yes guard with ruff. Go.
+
+Codex: Starting -- baseline: 12 failures.
+       ...
+       Iteration 1: fixed import path in test_auth.py -> 10 (-2) KEEP
+       ...
 ```
 
-**What happens:** Auto-detects broken targets (tests, types, lint, build). Prioritizes blockers. Fixes one thing per iteration. Commits, verifies error count decreased, guard-checks, keeps or reverts. Stops automatically at zero errors.
-
-**Flags:**
-
-| Flag | Purpose |
-|------|---------|
-| `--target <cmd>` | Explicit verify command |
-| `--guard <cmd>` | Safety command |
-| `--category <type>` | Only fix one category (test, type, lint, build) |
-| `--from-debug` | Import findings from latest debug session |
+Fix mode stops automatically when the error count reaches zero.
 
 Reference: `references/fix-workflow.md`
 
 ### security
 
-Read-only structured audit using STRIDE threat modeling, OWASP Top 10, and red-team analysis.
+Read-only structured audit using STRIDE threat modeling, OWASP Top 10, and red-team analysis. Every finding requires code evidence -- no theoretical vulnerabilities.
 
-```text
-$codex-autoresearch
-Mode: security
-Scope: src/api/**, src/middleware/**, src/validators/**
-Focus: SQL injection, XSS, and input sanitization
-Iterations: 10
+```
+You:   $codex-autoresearch
+       Check our API for injection vulnerabilities
+
+Codex: Confirmed:
+       - Scope: src/api/ and src/middleware/ (14 files)
+       - Focus: SQL injection, XSS, input sanitization
+
+       Need to confirm:
+       - Report only, or also fix critical findings?
+       - Should I also cover auth/access control?
+
+You:   Report first, and yes cover auth too.
+
+Codex: Starting audit.
+       ...
+       Finding S-1 [HIGH]: SQL injection in src/api/search.ts:42
+         Raw user input passed to query builder without parameterization
+         Exploitation: POST /search with payload `'; DROP TABLE users;--`
+       ...
 ```
 
-Every finding requires code evidence (file:line + exploitation scenario). No theoretical findings accepted.
+Security mode is read-only by default. To also repair findings, say so during setup:
 
-**Flags:**
+```
+You:   Find vulnerabilities and fix the critical ones.
+```
 
-| Flag | Purpose |
-|------|---------|
-| `--diff` | Only audit files changed since last audit |
-| `--fix` | Auto-remediate confirmed Critical/High findings |
-| `--fail-on <severity>` | Non-zero exit for CI/CD gating |
+Codex will audit first, then switch to fix mode for Critical/High findings.
 
 Reference: `references/security-workflow.md`
 
 ### ship
 
-8-phase gated release process: Identify -> Inventory -> Checklist -> Prepare -> Dry-run -> Ship -> Verify -> Log.
+Gated release verification. Auto-detects what you are shipping (PR, deployment, release) and generates a checklist.
 
-```text
-$codex-autoresearch
-Mode: ship
---auto
+```
+You:   $codex-autoresearch
+       Ship it
+
+Codex: Detected: PR to main with 3 commits.
+
+       Confirmed:
+       - Type: code PR
+       - Target: main branch
+
+       Need to confirm:
+       - Dry run first, or go live?
+       - Post-ship monitoring? (5 min / 15 min / skip)
+
+You:   Dry run first.
 ```
 
-Auto-detects what you are shipping (PR, deployment, release, content) and generates a domain-specific checklist. No external actions without explicit confirmation.
-
-**Flags:**
-
-| Flag | Purpose |
-|------|---------|
-| `--dry-run` | Validate without shipping |
-| `--auto` | Auto-approve if checklist passes |
-| `--force` | Skip non-critical items |
-| `--rollback` | Undo last ship action |
-| `--monitor N` | Post-ship monitoring for N minutes |
-| `--type <type>` | Override auto-detection |
-| `--checklist-only` | Just check readiness |
+External actions (deploy, publish, merge) must be confirmed during this setup phase. If not confirmed before "go," they are skipped and logged as blockers.
 
 Reference: `references/ship-workflow.md`
 
 ---
 
-## Cross-Domain Recipes
+## Mode Chaining
 
-The protocol is domain-agnostic. Only the metric and verify command change.
+Modes compose naturally through sequential invocations:
 
-| Domain | Metric | Verify | Guard |
-|--------|--------|--------|-------|
-| TypeScript | type error count | `tsc --noEmit 2>&1 \| tail -1` | `npm test` |
-| Python | pytest failures | `pytest -q` | `ruff check .` |
-| Go | test failures | `go test ./...` | `go vet ./...` |
-| Rust | test failures | `cargo test` | `cargo clippy` |
-| Coverage | coverage % | `pytest --cov=src --cov-report=term 2>&1 \| grep TOTAL \| awk '{print $NF}'` | `npx tsc --noEmit` |
-| Frontend | Lighthouse score | `npx lighthouse --quiet` | `npm test` |
-| Performance | p95 latency (ms) | `npm run bench \| grep p95` | `npm test` |
-| ML training | val_loss | `python train.py` | -- |
+**Find then fix:**
+
+```
+You:   $codex-autoresearch
+       API returns 503 randomly under load
+       [debug mode runs, produces findings]
+
+You:   $codex-autoresearch
+       Fix the bugs you just found
+       [fix mode runs, imports debug findings]
+```
+
+**Plan then execute:**
+
+```
+You:   $codex-autoresearch
+       I want to reduce our API latency but not sure how to measure it
+       [plan mode runs, produces config]
+
+You:   $codex-autoresearch
+       [paste the config plan generated, or just say "run the plan you made"]
+```
+
+**Audit then remediate:**
+
+```
+You:   $codex-autoresearch
+       Audit the auth system for vulnerabilities, then fix anything critical
+       [security mode audits, then automatically switches to fix mode]
+```
 
 ---
 
-## Multi-Mode Workflows
+## Results Log
 
-### Diagnose then repair
-
-```
-debug (Iterations: 15)  -->  fix --from-debug (Iterations: 30)
-```
-
-Debug mode finds all bugs with evidence. Fix mode imports those findings and repairs them one by one.
-
-### Plan then execute
+Every iteration is recorded in `research-results.tsv`:
 
 ```
-plan (Goal: "reduce API p95 latency")  -->  loop (paste generated config)
+iteration  commit   metric  delta   status    description
+0          a1b2c3d  47      0       baseline  initial any count
+1          b2c3d4e  41      -6      keep      replace any in auth module with strict types
+2          -        49      +8      discard   generic wrapper introduced new anys
+3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Plan mode outputs a complete config block. Copy it, run it.
+Progress summaries print every 5 iterations. Bounded runs print a final baseline-to-best summary.
 
-### Audit then remediate
-
-```
-security --fix (Iterations: 15)
-```
-
-Single invocation: audit first, then auto-fix Critical/High findings.
+The TSV file is the real audit trail -- not the git history (failed experiments are reverted from git but preserved in the log).
 
 ---
 
-## Operating Tips
+## Workspace Requirements
+
+The loop commits and reverts repeatedly. This requires a clean workspace.
+
+If unrelated uncommitted changes exist:
+- The loop will not start
+- Use plan mode instead (read-only, no git requirements)
+- Or isolate the work in a clean branch or worktree
+
+---
+
+## Output Artifacts
+
+| Mode | What it produces |
+|------|------------------|
+| loop | `research-results.tsv` |
+| plan | Config block printed inline (ready to paste) |
+| debug | `debug/{YYMMDD}-{HHMM}-{slug}/` directory with findings |
+| fix | `fix/{YYMMDD}-{HHMM}-{slug}/` directory with fix log |
+| security | `security/{YYMMDD}-{HHMM}-{slug}/` directory with audit report |
+| ship | `ship/{YYMMDD}-{HHMM}-{slug}/` directory with checklist and verification |
+
+---
+
+## Safety Model
+
+| Concern | How it is handled |
+|---------|-------------------|
+| Dirty worktree | Loop refuses to start; suggests plan mode or clean branch |
+| Failed change | `git reset --hard HEAD~1` keeps history clean; results log is the audit trail |
+| Guard failure | Up to 2 rework attempts before discarding |
+| Syntax error | Auto-fix immediately, does not count as iteration |
+| Runtime crash | Up to 3 fix attempts, then skip |
+| Resource exhaustion | Revert, try smaller variant |
+| Hanging process | Kill after timeout, revert |
+| Stuck (5+ consecutive discards) | Re-read all context, review patterns, try bolder changes |
+| Ambiguity mid-loop | Apply best practices autonomously; never pause to ask the user |
+| External side effects | Ship mode requires explicit confirmation during setup phase |
+
+---
+
+## Troubleshooting
 
 ### The skill does not appear
 
@@ -362,23 +457,28 @@ Single invocation: audit first, then auto-fix Critical/High findings.
 - Confirm `SKILL.md` exists at the root of that folder
 - Restart Codex after installation changes
 
-### The wrong skill triggers
+### Codex starts without asking
 
-- Use explicit invocation: `$codex-autoresearch`
-- Avoid vague prompts without measurable targets
+This should not happen. Rule 1 requires at least one confirming question. If it does happen, the skill may not be loading correctly -- check the installation path.
 
-### The wizard asks too many questions
+### The loop stops and asks a question
 
-- Provide more fields inline to skip wizard steps
-- Use `Mode: <name>` to skip mode classification
-- For loop mode, provide all 5 required fields
+This should not happen after you say "go." If it does, report it as a bug. The two-phase boundary is a hard rule.
+
+### The verify command fails on the first run
+
+Codex will attempt to fix it. If plan mode generated the config, it dry-runs the verify command before outputting the block. If you wrote the verify command yourself, test it manually first.
 
 ### The loop refuses to commit
 
-- Check for unrelated uncommitted changes
+- Check for unrelated uncommitted changes (`git status`)
 - Isolate work in a clean branch or worktree
-- Use `plan` mode first if the workspace is not clean
+- Use plan mode first if the workspace is not clean
 
 ### Can I use this without git?
 
 Plan mode and security mode (read-only) work without git. The iterative loop requires git for its commit/revert safety model.
+
+### Can I use this with any language?
+
+Yes. The protocol is language-agnostic. Only the verify and guard commands are domain-specific.

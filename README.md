@@ -215,7 +215,7 @@ If verify passes but guard fails, the change is reworked (up to 2 attempts). Gua
 | Find why something is broken | `debug` | Scope + Symptom |
 | Make failing tests/types/lint pass | `fix` | Target command |
 | Audit code for vulnerabilities | `security` | Scope + Focus |
-| Release with confidence | `ship` | `--auto` or `--dry-run` |
+| Release with confidence | `ship` | Say "ship it" or "dry run first" |
 
 ---
 
@@ -328,7 +328,7 @@ You:   Report first, and yes cover auth too.
 
 ### ship
 
-8-phase gated release process. Auto-detects ship type (PR, deployment, release).
+Gated release verification. Auto-detects what you are shipping (PR, deployment, release).
 
 ```
 You:   Ship it
@@ -348,7 +348,7 @@ Codex: Detected: PR to main with 3 commits.
 You:   Dry run first.
 ```
 
-See [GUIDE.md](GUIDE.md) for flags and advanced options for each mode.
+See [GUIDE.md](GUIDE.md) for detailed usage and advanced options for each mode.
 
 ---
 
@@ -358,8 +358,8 @@ Modes can be composed sequentially:
 
 ```
 plan  -->  loop              # figure out config, then execute
-debug -->  fix --from-debug  # find bugs, then repair them
-security --fix               # audit and remediate in one pass
+debug -->  fix               # find bugs, then repair them
+security + fix               # audit and remediate in one pass
 ```
 
 ---
@@ -437,7 +437,7 @@ codex-autoresearch/
 
 **How do I stop it?** Interrupt Codex, or set `Iterations: N`. Git state is always consistent because commits happen before verification.
 
-**Does security mode touch my code?** No. Read-only analysis. Use `--fix` to opt into remediation.
+**Does security mode touch my code?** No. Read-only analysis. Tell Codex to "also fix critical findings" during setup to opt into remediation.
 
 **How many iterations?** Depends on the task. 5 for targeted fixes, 10-20 for exploration, unlimited for overnight runs.
 

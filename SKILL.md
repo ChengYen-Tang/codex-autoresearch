@@ -80,7 +80,7 @@ If required fields are missing, use the wizard contract in `references/interacti
 6. Commit before verification only when `git status --porcelain` shows no changes outside the experiment scope.
 7. Never stage or revert unrelated user changes.
 8. Keep results logs uncommitted.
-9. Prefer `git reset --hard HEAD~1` for rollback; fall back to `git revert` only when reset fails.
+9. Prefer `git reset --hard HEAD~1` for rollback; fall back to `git revert --no-edit HEAD` only when reset fails.
 10. Discard gains under 1% that add disproportionate complexity.
 11. Unlimited runs by default unless the user explicitly asks for `Iterations: N`.
 12. External ship actions (deploy, publish, release) must be confirmed during the pre-launch wizard phase. If not confirmed before launch, skip them and log as blocker.

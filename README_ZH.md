@@ -215,7 +215,7 @@ Guard: npx tsc --noEmit                                                         
 | 找出某个东西为什么坏了 | `debug` | Scope + Symptom |
 | 让失败的测试/类型/lint 通过 | `fix` | Target 命令 |
 | 审计代码中的漏洞 | `security` | Scope + Focus |
-| 有信心地发布 | `ship` | `--auto` 或 `--dry-run` |
+| 有信心地发布 | `ship` | 说 "发布吧" 或 "先演练" |
 
 ---
 
@@ -328,7 +328,7 @@ Codex: 已确认：
 
 ### ship
 
-8 阶段门控发布。自动检测发布类型。
+门控发布验证。自动检测你要发布什么（PR、部署、发版）。
 
 ```
 你:    发布吧
@@ -348,7 +348,7 @@ Codex: 检测到：PR 到 main，3 个 commit。
 你:    先演练。
 ```
 
-各模式的标志和高级选项见 [GUIDE.md](GUIDE.md)。
+各模式的详细用法和高级选项见 [GUIDE.md](GUIDE.md)。
 
 ---
 
@@ -358,8 +358,8 @@ Codex: 检测到：PR 到 main，3 个 commit。
 
 ```
 plan  -->  loop              # 先生成配置，再执行
-debug -->  fix --from-debug  # 先找 bug，再修复
-security --fix               # 审计并修复一步到位
+debug -->  fix               # 先找 bug，再修复
+security + fix               # 审计并修复一步到位
 ```
 
 ---
@@ -437,7 +437,7 @@ codex-autoresearch/
 
 **怎么停止？** 中断 Codex，或设置 `Iterations: N`。git 状态始终一致，因为提交在验证之前。
 
-**security 模式会改代码吗？** 不会。只读分析。用 `--fix` 选择性修复。
+**security 模式会改代码吗？** 不会。只读分析。在设置阶段告诉 Codex "也修掉严重问题" 即可选择性修复。
 
 **迭代多少次？** 取决于任务。定向修复 5 次，探索性 10-20 次，过夜运行不设限。
 
