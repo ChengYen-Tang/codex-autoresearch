@@ -517,13 +517,16 @@ Non-interactive mode for automation pipelines. All config upfront, JSON output, 
 ```yaml
 - name: Reduce type errors
   run: |
-    codex exec --skill codex-autoresearch \
-      --goal "Reduce type errors" \
-      --scope "src/**/*.ts" \
-      --metric "type error count" \
-      --direction lower \
-      --verify "tsc --noEmit 2>&1 | grep -c error" \
-      --iterations 20
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
   continue-on-error: true
 ```
 
@@ -534,14 +537,18 @@ Exit codes: 0 = improved, 1 = no improvement, 2 = hard blocker.
 ```yaml
 optimize-coverage:
   script:
-    - codex exec --skill codex-autoresearch
-        --goal "Raise test coverage"
-        --scope "src/"
-        --metric "coverage percentage"
-        --direction higher
-        --verify "pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'"
-        --guard "ruff check ."
-        --iterations 15
+    - |
+      codex exec <<'PROMPT'
+      $codex-autoresearch
+      Mode: exec
+      Goal: Raise test coverage
+      Scope: src/
+      Metric: coverage percentage
+      Direction: higher
+      Verify: pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'
+      Guard: ruff check .
+      Iterations: 15
+      PROMPT
   allow_failure: true
 ```
 
@@ -550,14 +557,17 @@ optimize-coverage:
 ```yaml
 - name: Nightly lint cleanup
   run: |
-    codex exec --skill codex-autoresearch \
-      --goal "Eliminate ESLint violations" \
-      --scope "src/" \
-      --metric "violation count" \
-      --direction lower \
-      --verify "npx eslint src/ --format compact 2>&1 | tail -1 | grep -oP '\\d+ problem'" \
-      --guard "npm run test:unit" \
-      --iterations 30
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Eliminate ESLint violations
+    Scope: src/
+    Metric: violation count
+    Direction: lower
+    Verify: npx eslint src/ --format compact 2>&1 | tail -1 | grep -oP '\\d+ problem'
+    Guard: npm run test:unit
+    Iterations: 30
+    PROMPT
   schedule:
     - cron: '0 3 * * *'
 ```

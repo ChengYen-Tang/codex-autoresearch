@@ -1,9 +1,16 @@
 research-results.tsv
 research-results.prev.tsv
 research-results.corrupt.tsv
+autoresearch-state.json
+autoresearch-state.prev.json
+autoresearch-state.json.bak
+autoresearch-state.json.tmp
+research-results.tsv.tmp
 results.tsv
 run.log
 autoresearch-lessons.md
+__pycache__/
+*.pyc
 debug/
 fix/
 security/

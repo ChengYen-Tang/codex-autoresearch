@@ -457,11 +457,17 @@ Nicht-interaktiver Modus fuer Automatisierungspipelines. Die gesamte Konfigurati
 ```yaml
 # GitHub Actions Beispiel
 - name: Autoresearch-Optimierung
-  run: codex exec --skill codex-autoresearch
-         --goal "Reduce type errors" --scope "src/**/*.ts"
-         --metric "type error count" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 Exit-Codes: 0 = verbessert, 1 = keine Verbesserung, 2 = harte Blockade.
@@ -474,7 +480,7 @@ Siehe `references/exec-workflow.md`.
 
 Jede Iteration wird in zwei komplementaeren Formaten aufgezeichnet:
 
-- **`research-results.tsv`** -- vollstaendiger Audit-Trail, eine Zeile pro Iteration
+- **`research-results.tsv`** -- vollstaendiger Audit-Trail, mit einer Hauptzeile pro Iteration und optionalen parallelen Worker-Zeilen
 - **`autoresearch-state.json`** -- kompakter Zustandssnapshot fuer schnelle Sitzungswiederaufnahme
 
 ```
@@ -485,7 +491,7 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Beide Dateien werden nicht in git committed. Bei der Sitzungswiederaufnahme wird der JSON-Zustand mit der TSV-Zeilenanzahl kreuzvalidiert, um Inkonsistenzen zu erkennen. Fortschrittsberichte werden alle 5 Iterationen ausgegeben. Begrenzte Laeufe geben am Ende eine Zusammenfassung von Baseline bis Bestwert aus.
+Beide Dateien werden nicht in git committed. Bei der Sitzungswiederaufnahme wird der JSON-Zustand gegen eine rekonstruierte TSV-Hauptiterationszusammenfassung kreuzvalidiert und nicht gegen die rohe Zeilenanzahl. Fortschrittsberichte werden alle 5 Iterationen ausgegeben. Begrenzte Laeufe geben am Ende eine Zusammenfassung von Baseline bis Bestwert aus.
 
 ---
 
@@ -494,7 +500,7 @@ Beide Dateien werden nicht in git committed. Bei der Sitzungswiederaufnahme wird
 | Bedenken | Behandlung |
 |----------|------------|
 | Unsauberer Arbeitsbaum | Die Schleife verweigert den Start; schlaegt den Modus `plan` oder einen sauberen Branch vor |
-| Fehlgeschlagene Aenderung | `git reset --hard HEAD~1` haelt die Historie sauber; das Ergebnisprotokoll ist der Audit-Trail |
+| Fehlgeschlagene Aenderung | Verwendet die vor dem Start genehmigte Rollback-Strategie: `git reset --hard HEAD~1` nur in einem isolierten Experiment-Branch/Worktree mit Genehmigung, sonst `git revert --no-edit HEAD`; das Ergebnisprotokoll bleibt der Audit-Trail |
 | Guard-Fehlschlag | Bis zu 2 Ueberarbeitungsversuche, dann Zuruecksetzen |
 | Syntaxfehler | Sofortige automatische Korrektur, zaehlt nicht als Iteration |
 | Laufzeit-Absturz | Bis zu 3 Reparaturversuche, dann ueberspringen |

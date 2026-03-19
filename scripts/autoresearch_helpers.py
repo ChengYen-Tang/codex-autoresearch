@@ -1,0 +1,460 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import csv
+import json
+import os
+import re
+from copy import deepcopy
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any
+
+HEADER = [
+    "iteration",
+    "commit",
+    "metric",
+    "delta",
+    "guard",
+    "status",
+    "description",
+]
+
+MAIN_LABEL_RE = re.compile(r"^(0|[1-9]\d*)$")
+WORKER_LABEL_RE = re.compile(r"^(0|[1-9]\d*)([a-z]+)$")
+MAIN_STATUSES = {
+    "baseline",
+    "blocked",
+    "crash",
+    "discard",
+    "drift",
+    "keep",
+    "no-op",
+    "pivot",
+    "refine",
+    "search",
+}
+
+
+class AutoresearchError(Exception):
+    pass
+
+
+@dataclass
+class LogRow:
+    iteration: str
+    commit: str
+    metric: Decimal
+    delta: str
+    guard: str
+    status: str
+    description: str
+    line_number: int
+
+    @property
+    def main_iteration(self) -> int | None:
+        if MAIN_LABEL_RE.fullmatch(self.iteration):
+            return int(self.iteration)
+        return None
+
+    @property
+    def worker_parent_iteration(self) -> int | None:
+        match = WORKER_LABEL_RE.fullmatch(self.iteration)
+        if match:
+            return int(match.group(1))
+        return None
+
+
+@dataclass
+class ParsedLog:
+    comments: list[str]
+    metadata: dict[str, str]
+    rows: list[LogRow]
+
+    @property
+    def main_rows(self) -> list[LogRow]:
+        return [row for row in self.rows if row.main_iteration is not None]
+
+    @property
+    def worker_rows(self) -> list[LogRow]:
+        return [row for row in self.rows if row.worker_parent_iteration is not None]
+
+
+def parse_decimal(value: Any, field_name: str = "metric") -> Decimal:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise AutoresearchError(f"Invalid {field_name}: {value!r}") from exc
+
+
+def format_decimal(value: Decimal) -> str:
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    if text == "-0":
+        return "0"
+    return text
+
+
+def format_delta(value: Decimal) -> str:
+    text = format_decimal(value)
+    if value > 0 and not text.startswith("+"):
+        return f"+{text}"
+    return text
+
+
+def decimal_to_json_number(value: Decimal) -> int | float:
+    if value == value.to_integral_value():
+        return int(value)
+    return float(value)
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def improvement(metric: Decimal, reference: Decimal, direction: str) -> bool:
+    if direction == "lower":
+        return metric < reference
+    if direction == "higher":
+        return metric > reference
+    raise AutoresearchError(f"Unsupported direction: {direction}")
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise AutoresearchError(f"Missing JSON file: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise AutoresearchError(f"Invalid JSON in {path}: {exc}") from exc
+
+
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
+def parse_metadata_comment(line: str) -> tuple[str, str] | None:
+    if not line.startswith("#"):
+        return None
+    content = line[1:].strip()
+    if ":" not in content:
+        return None
+    key, value = content.split(":", 1)
+    key = key.strip()
+    if not key:
+        return None
+    return key, value.strip()
+
+
+def parse_results_log(path: Path) -> ParsedLog:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError as exc:
+        raise AutoresearchError(f"Missing results log: {path}") from exc
+
+    comments: list[str] = []
+    metadata: dict[str, str] = {}
+    data_lines: list[tuple[int, str]] = []
+
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        if line.startswith("#"):
+            comments.append(line)
+            parsed = parse_metadata_comment(line)
+            if parsed is not None:
+                key, value = parsed
+                metadata[key] = value
+            continue
+        data_lines.append((line_number, line))
+
+    if not data_lines:
+        raise AutoresearchError(f"Results log has no header: {path}")
+
+    header_line_number, header_line = data_lines[0]
+    header = next(csv.reader([header_line], delimiter="\t"))
+    if header != HEADER:
+        raise AutoresearchError(
+            f"Unexpected TSV header in {path}:{header_line_number}: {header!r}"
+        )
+
+    rows: list[LogRow] = []
+    for line_number, line in data_lines[1:]:
+        columns = next(csv.reader([line], delimiter="\t"))
+        if len(columns) != len(HEADER):
+            raise AutoresearchError(
+                f"Unexpected column count in {path}:{line_number}: expected {len(HEADER)}, got {len(columns)}"
+            )
+        metric = parse_decimal(columns[2], "metric")
+        row = LogRow(
+            iteration=columns[0],
+            commit=columns[1],
+            metric=metric,
+            delta=columns[3],
+            guard=columns[4],
+            status=columns[5],
+            description=columns[6],
+            line_number=line_number,
+        )
+        rows.append(row)
+
+    if not rows:
+        raise AutoresearchError(f"Results log has no data rows: {path}")
+    return ParsedLog(comments=comments, metadata=metadata, rows=rows)
+
+
+def write_results_log(path: Path, comments: list[str], rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    parts: list[str] = []
+    parts.extend(comment.rstrip("\n") for comment in comments)
+    parts.append("\t".join(HEADER))
+    for row in rows:
+        parts.append(
+            "\t".join(
+                [
+                    row["iteration"],
+                    row["commit"],
+                    row["metric"],
+                    row["delta"],
+                    row["guard"],
+                    row["status"],
+                    row["description"],
+                ]
+            )
+        )
+    tmp_path.write_text("\n".join(parts) + "\n", encoding="utf-8")
+    os.replace(tmp_path, path)
+
+
+def append_rows(path: Path, new_rows: list[dict[str, str]]) -> ParsedLog:
+    parsed = parse_results_log(path)
+    existing_rows = [row_to_dict(row) for row in parsed.rows]
+    write_results_log(path, parsed.comments, existing_rows + new_rows)
+    return parse_results_log(path)
+
+
+def row_to_dict(row: LogRow) -> dict[str, str]:
+    return {
+        "iteration": row.iteration,
+        "commit": row.commit,
+        "metric": format_decimal(row.metric),
+        "delta": row.delta,
+        "guard": row.guard,
+        "status": row.status,
+        "description": row.description,
+    }
+
+
+def log_summary(parsed: ParsedLog, direction: str) -> dict[str, Any]:
+    main_rows = parsed.main_rows
+    if not main_rows:
+        raise AutoresearchError("Results log has no main iteration rows.")
+
+    baseline = main_rows[0]
+    if baseline.main_iteration != 0 or baseline.status != "baseline":
+        raise AutoresearchError("Results log must begin with baseline row 0.")
+
+    summary = {
+        "iteration": 0,
+        "baseline_metric": baseline.metric,
+        "best_metric": baseline.metric,
+        "best_iteration": 0,
+        "current_metric": baseline.metric,
+        "last_commit": baseline.commit,
+        "last_trial_commit": baseline.commit,
+        "last_trial_metric": baseline.metric,
+        "keeps": 0,
+        "discards": 0,
+        "crashes": 0,
+        "no_ops": 0,
+        "blocked": 0,
+        "consecutive_discards": 0,
+        "pivot_count": 0,
+        "last_status": "baseline",
+        "worker_rows": 0,
+        "main_rows": 1,
+    }
+
+    for row in parsed.rows[1:]:
+        if row.worker_parent_iteration is not None:
+            summary["worker_rows"] += 1
+            continue
+
+        main_iteration = row.main_iteration
+        if main_iteration is None:
+            continue
+        summary["iteration"] = main_iteration
+        summary["main_rows"] += 1
+        summary["last_status"] = row.status
+        summary["last_trial_commit"] = row.commit
+        summary["last_trial_metric"] = row.metric
+
+        if row.status == "keep":
+            summary["keeps"] += 1
+            summary["current_metric"] = row.metric
+            summary["last_commit"] = row.commit
+            summary["consecutive_discards"] = 0
+            summary["pivot_count"] = 0
+            if improvement(row.metric, summary["best_metric"], direction):
+                summary["best_metric"] = row.metric
+                summary["best_iteration"] = main_iteration
+        elif row.status == "discard":
+            summary["discards"] += 1
+            summary["consecutive_discards"] += 1
+        elif row.status == "crash":
+            summary["crashes"] += 1
+            summary["consecutive_discards"] += 1
+        elif row.status == "no-op":
+            summary["no_ops"] += 1
+            summary["consecutive_discards"] += 1
+        elif row.status == "blocked":
+            summary["blocked"] += 1
+        elif row.status == "drift":
+            summary["current_metric"] = row.metric
+            summary["best_metric"] = row.metric
+            summary["best_iteration"] = main_iteration
+            if row.commit != "-":
+                summary["last_commit"] = row.commit
+            summary["consecutive_discards"] = 0
+        elif row.status == "refine":
+            pass
+        elif row.status == "pivot":
+            summary["pivot_count"] += 1
+        elif row.status == "search":
+            pass
+        else:
+            raise AutoresearchError(
+                f"Unsupported status {row.status!r} in results log line {row.line_number}"
+            )
+
+    return summary
+
+
+def compare_summary_to_state(
+    reconstructed: dict[str, Any],
+    state_payload: dict[str, Any],
+    *,
+    tolerance: Decimal = Decimal("0.001"),
+) -> list[str]:
+    state = state_payload.get("state", {})
+    mismatches: list[str] = []
+
+    def compare_decimal_field(field_name: str) -> None:
+        if field_name not in state:
+            return
+        expected = reconstructed[field_name]
+        actual = parse_decimal(state[field_name], field_name)
+        if abs(expected - actual) > tolerance:
+            mismatches.append(
+                f"{field_name}: state={format_decimal(actual)} tsv={format_decimal(expected)}"
+            )
+
+    def compare_scalar_field(field_name: str) -> None:
+        if field_name not in state:
+            return
+        if state[field_name] != reconstructed[field_name]:
+            mismatches.append(
+                f"{field_name}: state={state[field_name]!r} tsv={reconstructed[field_name]!r}"
+            )
+
+    compare_scalar_field("iteration")
+    compare_decimal_field("baseline_metric")
+    compare_decimal_field("best_metric")
+    compare_scalar_field("best_iteration")
+    compare_decimal_field("current_metric")
+    compare_scalar_field("last_commit")
+    compare_scalar_field("last_trial_commit")
+    compare_decimal_field("last_trial_metric")
+    compare_scalar_field("keeps")
+    compare_scalar_field("discards")
+    compare_scalar_field("crashes")
+    compare_scalar_field("no_ops")
+    compare_scalar_field("blocked")
+    compare_scalar_field("consecutive_discards")
+    compare_scalar_field("pivot_count")
+    compare_scalar_field("last_status")
+    return mismatches
+
+
+def build_state_payload(
+    *,
+    mode: str,
+    run_tag: str | None,
+    config: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "version": 1,
+        "run_tag": run_tag or "",
+        "mode": mode,
+        "config": config,
+        "state": {
+            "iteration": summary["iteration"],
+            "baseline_metric": decimal_to_json_number(summary["baseline_metric"]),
+            "best_metric": decimal_to_json_number(summary["best_metric"]),
+            "best_iteration": summary["best_iteration"],
+            "current_metric": decimal_to_json_number(summary["current_metric"]),
+            "last_commit": summary["last_commit"],
+            "last_trial_commit": summary["last_trial_commit"],
+            "last_trial_metric": decimal_to_json_number(summary["last_trial_metric"]),
+            "keeps": summary["keeps"],
+            "discards": summary["discards"],
+            "crashes": summary["crashes"],
+            "no_ops": summary["no_ops"],
+            "blocked": summary["blocked"],
+            "consecutive_discards": summary["consecutive_discards"],
+            "pivot_count": summary["pivot_count"],
+            "last_status": summary["last_status"],
+        },
+        "updated_at": utc_now(),
+    }
+
+
+def require_consistent_state(results_path: Path, state_path: Path) -> tuple[ParsedLog, dict[str, Any], dict[str, Any], str]:
+    parsed = parse_results_log(results_path)
+    state_payload = read_json(state_path)
+    direction = state_payload.get("config", {}).get("direction")
+    if direction not in {"lower", "higher"}:
+        raise AutoresearchError("State config.direction must be 'lower' or 'higher'.")
+    reconstructed = log_summary(parsed, direction)
+    mismatches = compare_summary_to_state(reconstructed, state_payload)
+    if mismatches:
+        raise AutoresearchError(
+            "Results log and JSON state diverged. Run autoresearch_resume_check.py first. "
+            + "; ".join(mismatches)
+        )
+    return parsed, state_payload, reconstructed, direction
+
+
+def make_row(
+    *,
+    iteration: str,
+    commit: str,
+    metric: Decimal,
+    delta: Decimal,
+    guard: str,
+    status: str,
+    description: str,
+) -> dict[str, str]:
+    if status not in MAIN_STATUSES and WORKER_LABEL_RE.fullmatch(iteration) is None:
+        raise AutoresearchError(f"Unsupported status: {status}")
+    return {
+        "iteration": iteration,
+        "commit": commit,
+        "metric": format_decimal(metric),
+        "delta": format_delta(delta),
+        "guard": guard,
+        "status": status,
+        "description": description,
+    }
+
+
+def clone_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return deepcopy(payload)

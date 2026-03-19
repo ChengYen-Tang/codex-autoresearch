@@ -457,11 +457,17 @@ Modo nao interativo para pipelines de automacao. Toda a configuracao e fornecida
 ```yaml
 # Exemplo de GitHub Actions
 - name: Otimizacao com Autoresearch
-  run: codex exec --skill codex-autoresearch
-         --goal "Reduce type errors" --scope "src/**/*.ts"
-         --metric "type error count" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 Codigos de saida: 0 = melhorou, 1 = sem melhoria, 2 = bloqueio duro.
@@ -474,7 +480,7 @@ Consulte `references/exec-workflow.md`.
 
 Cada iteracao e registrada em dois formatos complementares:
 
-- **`research-results.tsv`** -- trilha de auditoria completa, uma linha por iteracao
+- **`research-results.tsv`** -- trilha de auditoria completa, com uma linha principal por iteracao e linhas paralelas de worker quando necessario
 - **`autoresearch-state.json`** -- snapshot de estado compacto para retomada rapida de sessao
 
 ```
@@ -485,7 +491,7 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Ambos os arquivos nao sao commitados no git. Durante a retomada de sessao, o estado JSON e validado cruzadamente com a contagem de linhas TSV para detectar inconsistencias. Resumos de progresso sao impressos a cada 5 iteracoes. Execucoes limitadas imprimem um resumo final da linha de base ao melhor resultado.
+Ambos os arquivos nao sao commitados no git. Durante a retomada de sessao, o estado JSON e validado cruzadamente com um resumo reconstruido das iteracoes principais do TSV, e nao com a simples contagem de linhas. Resumos de progresso sao impressos a cada 5 iteracoes. Execucoes limitadas imprimem um resumo final da linha de base ao melhor resultado.
 
 ---
 
@@ -494,7 +500,7 @@ Ambos os arquivos nao sao commitados no git. Durante a retomada de sessao, o est
 | Preocupacao | Como e tratada |
 |-------------|----------------|
 | Diretorio de trabalho sujo | O loop se recusa a iniciar; sugere modo `plan` ou branch limpa |
-| Alteracao com falha | `git reset --hard HEAD~1` mantem o historico limpo; o registro de resultados e a trilha de auditoria |
+| Alteracao com falha | Usa a estrategia de rollback aprovada antes do inicio: `git reset --hard HEAD~1` apenas em branch/worktree experimental isolado e aprovado; caso contrario usa `git revert --no-edit HEAD`; o registro de resultados continua sendo a trilha de auditoria |
 | Falha do Guard | Ate 2 tentativas de reajuste, depois reverte |
 | Erro de sintaxe | Correcao imediata, nao conta como iteracao |
 | Crash em tempo de execucao | Ate 3 tentativas de correcao, depois pula |

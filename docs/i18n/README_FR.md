@@ -458,11 +458,17 @@ Mode non interactif pour les pipelines d'automatisation. Toute la configuration 
 ```yaml
 # Exemple GitHub Actions
 - name: Autoresearch optimization
-  run: codex exec --skill codex-autoresearch
-         --goal "Reduce type errors" --scope "src/**/*.ts"
-         --metric "type error count" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 Codes de sortie : 0 = ameliore, 1 = pas d'amelioration, 2 = bloqueur critique.
@@ -475,7 +481,7 @@ Voir `references/exec-workflow.md`.
 
 Chaque iteration est enregistree dans deux formats complementaires :
 
-- **`research-results.tsv`** -- piste d'audit complete, une ligne par iteration
+- **`research-results.tsv`** -- piste d'audit complete, avec une ligne principale par iteration et, si besoin, des lignes worker paralleles
 - **`autoresearch-state.json`** -- instantane d'etat compact pour une reprise de session rapide
 
 ```
@@ -486,7 +492,7 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Les deux fichiers ne sont pas commites dans git. Lors de la reprise de session, l'etat JSON est croise avec le nombre de lignes TSV pour detecter les incoherences. Les resumes de progression sont affiches toutes les 5 iterations. Les executions bornees affichent un resume final de la base au meilleur resultat.
+Les deux fichiers ne sont pas commites dans git. Lors de la reprise de session, l'etat JSON est croise avec un resume reconstruit des iterations principales TSV, et non avec le simple nombre de lignes. Les resumes de progression sont affiches toutes les 5 iterations. Les executions bornees affichent un resume final de la base au meilleur resultat.
 
 ---
 
@@ -495,7 +501,7 @@ Les deux fichiers ne sont pas commites dans git. Lors de la reprise de session, 
 | Preoccupation | Traitement |
 |---------------|------------|
 | Arbre de travail sale | La boucle refuse de demarrer ; suggere le mode `plan` ou une branche propre |
-| Changement echoue | `git reset --hard HEAD~1` garde l'historique propre ; le journal des resultats est la trace d'audit |
+| Changement echoue | Utilise la strategie de rollback approuvee avant le lancement : `git reset --hard HEAD~1` seulement dans une branche/worktree d'experience isolee et approuvee, sinon `git revert --no-edit HEAD` ; le journal des resultats reste la trace d'audit |
 | Echec du Guard | Jusqu'a 2 tentatives de correction, puis annulation |
 | Erreur de syntaxe | Correction automatique immediate, ne compte pas comme iteration |
 | Crash a l'execution | Jusqu'a 3 tentatives de correction, puis passage au suivant |

@@ -23,6 +23,7 @@ Optional:
 - `Iterations`
 - `Run tag`
 - `Stop condition`
+- `Rollback policy` (required before launch if destructive rollback may be used)
 
 If any required input is missing, use the wizard contract from `references/interaction-wizard.md` to scan the repo and clarify with the user.
 
@@ -42,13 +43,17 @@ Before anything else, check for a prior interrupted run per `references/session-
    - JSON corrupt -> rename to `.bak`, fall back to TSV.
 3. If no prior run is detected, proceed with fresh setup.
 
-### JSON State Initial Write
+### Run Artifact Initialization
 
-After the wizard completes (or after full resume is confirmed), write the initial `autoresearch-state.json`:
+Do not create `research-results.tsv` or `autoresearch-state.json` before the baseline metric is known.
 
-1. Write to `autoresearch-state.json.tmp` with `version`, `run_tag`, `mode`, full `config` object, and initial `state` (iteration 0, baseline metric, all counters at 0).
-2. Atomically rename `.tmp` to `autoresearch-state.json`.
-3. Do not commit this file to git.
+After Phase 2 establishes the baseline, initialize both artifacts together:
+
+```bash
+python3 scripts/autoresearch_init_run.py ...
+```
+
+This writes the baseline TSV row (`iteration = 0`) and the matching JSON snapshot in one step.
 
 ### Environment Probe
 
@@ -63,7 +68,7 @@ Run environment detection per `references/environment-awareness.md`:
 Before starting any loop, ALWAYS:
 
 1. Scan the repo to understand context.
-2. Ask at least one round of clarifying questions based on what you found -- confirm scope, metric, verify command, guard, and iteration count with the user.
+2. Ask at least one round of clarifying questions based on what you found -- confirm scope, metric, verify command, run style (until interrupted vs bounded), and any rollback approval needed for unattended execution.
 3. Present a plain-language summary for the user to approve.
 4. Only start the loop after the user explicitly says "go" / "start" / "launch" or equivalent.
 
@@ -79,6 +84,18 @@ Never silently infer all fields and start iterating. A 30-second confirmation is
 4. Confirm the scope resolves to real files.
 5. Confirm the verify command exists and is plausible for this repo.
 6. If a guard exists, confirm it is a pass/fail command.
+7. If destructive rollback may be needed, get approval during setup before launch and prefer a dedicated experiment branch/worktree for unattended runs.
+
+### Autoresearch-Owned Artifacts
+
+Treat these files as experiment-owned artifacts, not unrelated user changes:
+
+- `research-results.tsv`
+- `autoresearch-state.json`
+- `autoresearch-lessons.md`
+- `.tmp`, `.bak`, and `.prev` variants of those files
+
+They may stay uncommitted between iterations and across resumes, but they must never be staged in experiment commits.
 
 ### Dirty Worktree Rule
 
@@ -86,7 +103,9 @@ The loop may commit and revert repeatedly. That is only safe when the workspace 
 
 If `git status --porcelain` is non-empty **during Phase 0 (before launch)**:
 
-- Ask the user during the wizard phase: "I see uncommitted changes. Are these part of the current experiment, or should I work on a clean branch?"
+- If the only changes are autoresearch-owned artifacts, continue.
+- Otherwise ask the user during the wizard phase: "I see uncommitted changes. Are these part of the current experiment, or should I work on a clean branch?"
+
 - If the user confirms the changes are part of the experiment, continue.
 - If the user says no, suggest `plan` mode or a clean branch/worktree.
 
@@ -124,6 +143,8 @@ Record:
 - guard result,
 - current commit hash,
 - a short baseline description.
+
+Immediately after the baseline is known, initialize the run artifacts with `scripts/autoresearch_init_run.py`.
 
 If the baseline itself fails unpredictably, do not enter the optimization loop. Either repair the setup first or switch to `debug` or `fix` mode.
 
@@ -196,6 +217,7 @@ git commit -m "experiment: <what changed and why>"
 Rules:
 
 - stage only files owned by the experiment,
+- never stage autoresearch-owned artifacts,
 - inspect the staged file list before committing,
 - if there is no diff, log `no-op` and move on (counts toward the consecutive-discard threshold for stuck recovery),
 - prefer descriptive `experiment:` commit messages.
@@ -257,15 +279,17 @@ Discard the iteration when:
 - Marginal improvement (< 1%) combined with significant complexity increase = discard.
 - Metric unchanged but code becomes simpler = keep.
 
-Preferred rollback:
+Rollback follows the strategy approved during setup:
 
 ```bash
 git reset --hard HEAD~1
 ```
 
-This keeps the git history clean across many iterations. The results log (`research-results.tsv`) serves as the true audit trail for all experiments, including discarded ones.
+- Use `git reset --hard HEAD~1` only when the run is isolated in a dedicated experiment branch/worktree and that destructive rollback was explicitly approved before launch.
+- Otherwise use `git revert --no-edit HEAD`.
+- Never roll back unrelated user changes or autoresearch-owned artifacts.
 
-Fallback: if `git reset --hard HEAD~1` fails (e.g., merge conflicts or unusual state), use `git revert --no-edit HEAD` instead.
+The results log (`research-results.tsv`) serves as the true audit trail for all experiments, including discarded ones.
 
 ### Crash
 
@@ -294,13 +318,21 @@ The results log stays uncommitted.
 
 ### JSON State Update
 
-Immediately after appending the TSV row, atomically update `autoresearch-state.json`:
+Do not hand-edit `research-results.tsv` or `autoresearch-state.json`.
 
-1. Build the updated state object: increment `state.iteration`, update `state.current_metric`, `state.last_commit`, `state.last_status`, `state.keeps`/`state.discards`/`state.crashes`, `state.consecutive_discards`, `state.pivot_count`, and recalculate `state.best_metric`/`state.best_iteration` if the metric improved.
-2. Set `updated_at` to the current UTC timestamp.
-3. Write to `autoresearch-state.json.tmp`.
-4. Rename `.tmp` to `autoresearch-state.json` (atomic).
-5. Do not commit this file to git.
+- For serial/main rows, prefer:
+  ```bash
+  python3 scripts/autoresearch_record_iteration.py ...
+  ```
+- For parallel batches, prefer:
+  ```bash
+  python3 scripts/autoresearch_select_parallel_batch.py --batch-file ...
+  ```
+
+These helpers keep two key semantics consistent:
+
+1. `state.current_metric` is the retained metric after the keep/discard decision.
+2. `state.last_trial_metric` is the metric from the latest attempted main iteration.
 
 ## Phase 9: Repeat
 
@@ -341,7 +373,7 @@ Run health checks per `references/health-check-protocol.md`:
 
 - **Every iteration:** disk space, git state, verify command existence, wall-clock tracking.
 - **Every 10 iterations:** scope integrity, environment drift, verify/guard consistency, log integrity deep check.
-- Log integrity (row count validation) runs every iteration as a lightweight check. The deeper consistency check (parsing, cross-referencing) runs every 10 iterations.
+- Log integrity should use the helper-script reconstruction of main rows and retained state, not raw TSV row counts.
 - Auto-recover safe issues. Hard blocker on unrecoverable issues.
 
 ## Progress Reporting

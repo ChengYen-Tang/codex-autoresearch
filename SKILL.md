@@ -1,6 +1,8 @@
 ---
 name: codex-autoresearch
-description: "Autonomous goal-directed iteration. Loops autonomously -- modify, verify, keep/discard, repeat -- toward any measurable or verifiable outcome. Use when: (1) iteratively improving code with a measurable target (tests, coverage, bundle size, latency), (2) planning a loop config from a vague goal, (3) hunting bugs with evidence and hypotheses, (4) fixing errors (tests, types, lint, build) to zero, (5) running a structured security audit, (6) gating and executing a ship workflow, or (7) running non-interactive CI/CD optimization with JSON output. Do not use for one-shot questions, subjective writing, or pure conversation without an actionable goal."
+description: "Autonomous long-running iteration for Codex CLI. Use when the user wants Codex to plan or run an unattended improve-verify loop toward a measurable or verifiable outcome, especially for overnight runs; it also covers repeated debugging, fixing, security auditing, and ship-readiness workflows. Do not use for ordinary one-shot coding help or casual Q&A."
+metadata:
+  short-description: "Run an unattended improve-verify loop"
 ---
 
 # codex-autoresearch
@@ -19,8 +21,9 @@ Autonomous goal-directed iteration. Modify -> Verify -> Keep/Discard -> Repeat.
 8. Load cross-cutting protocols for iterating modes: `references/lessons-protocol.md`, `references/pivot-protocol.md`, `references/health-check-protocol.md`.
 9. Optionally load `references/hypothesis-perspectives.md`, `references/parallel-experiments-protocol.md`, `references/web-search-protocol.md` based on configuration.
 10. Parse inline config from the user prompt or skill mention.
-11. Execute the selected workflow exactly as written.
-12. Produce the required structured output and artifacts.
+11. Use the bundled helper scripts for stateful artifacts when they apply: `scripts/autoresearch_init_run.py`, `scripts/autoresearch_record_iteration.py`, `scripts/autoresearch_resume_check.py`, `scripts/autoresearch_select_parallel_batch.py`.
+12. Execute the selected workflow exactly as written.
+13. Produce the required structured output and artifacts.
 
 ## Core Loop
 
@@ -90,16 +93,17 @@ If required fields are missing, use the wizard contract in `references/interacti
 3. Read all in-scope files before the first write.
 4. One focused change per iteration.
 5. Mechanical verification only.
-6. Commit before verification only when `git status --porcelain` shows no changes outside the experiment scope.
+6. Commit before verification only when `git status --porcelain` shows no changes outside the experiment scope or autoresearch-owned artifacts.
 7. Never stage or revert unrelated user changes.
-8. Keep results logs uncommitted.
-9. Prefer `git reset --hard HEAD~1` for rollback; fall back to `git revert --no-edit HEAD` only when reset fails.
+8. Keep run artifacts uncommitted and never stage them.
+9. Use the rollback strategy approved during setup. In a dedicated experiment branch/worktree with pre-launch approval, `git reset --hard HEAD~1` is allowed; otherwise use `git revert --no-edit HEAD`.
 10. Discard gains under 1% that add disproportionate complexity.
 11. Unlimited runs by default unless the user explicitly asks for `Iterations: N`.
 12. External ship actions (deploy, publish, release) must be confirmed during the pre-launch wizard phase. If not confirmed before launch, skip them and log as blocker.
 13. NEVER STOP. NEVER ASK "should I continue?". Keep iterating until interrupted or a hard blocker appears (see `references/autonomous-loop-protocol.md` Stop Conditions for the full definition). Examples: verify command no longer runnable, scope files deleted externally, git repo corrupted, disk full, or the same crash 5+ times in a row.
 14. When stuck (3+ consecutive discards), use the PIVOT/REFINE escalation ladder from `references/pivot-protocol.md` instead of brute-force retrying.
 15. Extract lessons after every kept iteration and every pivot (see `references/lessons-protocol.md`).
+16. Prefer the bundled helper scripts over hand-editing `research-results.tsv` or `autoresearch-state.json`.
 
 ## Structured Output
 

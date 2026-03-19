@@ -44,10 +44,10 @@ iteration	commit	metric	delta	guard	status	description
 
 | Column | Meaning |
 |--------|---------|
-| `iteration` | Sequential counter, starting at `0` for the baseline. Parallel batches use suffix notation (`5a`, `5b`, `5c`) |
+| `iteration` | Integer main iteration counter starting at `0` for the baseline. Parallel worker detail rows use suffix notation (`5a`, `5b`, `5c`) |
 | `commit` | Short hash for kept or attempted commit, `-` if reverted or not committed |
-| `metric` | Parsed metric value |
-| `delta` | Change versus current best |
+| `metric` | Parsed metric value for that row's attempt or recalibration |
+| `delta` | `metric - retained_metric_before_row` |
 | `guard` | `pass`, `fail`, or `-` |
 | `status` | See Status Values below |
 | `description` | One-sentence explanation of the iteration |
@@ -81,21 +81,36 @@ iteration	commit	metric	delta	guard	status	description
 
 ## Parallel Batch Notation
 
-When parallel experiments are active (see `references/parallel-experiments-protocol.md`), use suffix notation for worker iterations:
+When parallel experiments are active (see `references/parallel-experiments-protocol.md`), log worker detail rows first, then append one authoritative main row for the batch:
 
 ```tsv
-5a	abc1234	38	-3	pass	keep	[PARALLEL worker-a] narrowed auth types (SELECTED)
+5a	abc1234	38	-3	pass	keep	[PARALLEL worker-a] narrowed auth types
 5b	-	42	+1	pass	discard	[PARALLEL worker-b] wrapper approach
-5c	-	40	-1	fail	discard	[PARALLEL worker-c] union types (guard fail)
+5c	-	41	0	-	crash	[PARALLEL worker-c] timeout after 20m
+5	abc1234	38	-3	pass	keep	[PARALLEL batch] selected worker-a: narrowed auth types
 ```
 
-Only the selected result increments the main iteration counter.
+Only integer rows (`0`, `1`, `2`, `5`) define the retained state. Worker rows are audit detail and never increment `state.iteration` by themselves.
+
+## Helper Scripts
+
+Prefer the bundled helper scripts for stateful artifact updates:
+
+- `python3 scripts/autoresearch_init_run.py ...`
+  Initializes `research-results.tsv` and `autoresearch-state.json` together from the baseline measurement.
+- `python3 scripts/autoresearch_record_iteration.py ...`
+  Appends one authoritative main iteration row and updates JSON state atomically.
+- `python3 scripts/autoresearch_resume_check.py ...`
+  Reconstructs retained state from the TSV and decides `full_resume`, `mini_wizard`, `tsv_fallback`, or `fresh_start`.
+- `python3 scripts/autoresearch_select_parallel_batch.py --batch-file ...`
+  Logs worker rows, appends the main batch row, and updates JSON state once per batch.
 
 ## Rules
 
-- Create the log at setup time.
+- Create the log only after the baseline metric is known.
 - Append after every iteration, including crashes, no-ops, refines, pivots, and searches.
 - Never commit the log.
+- Treat the log, JSON state, and lessons file as autoresearch-owned artifacts: leave them unstaged and ignore them when checking experiment scope.
 - Re-read the latest entries before choosing the next idea.
 - Health check warnings are logged in the description column with a `[HEALTH]` prefix.
 
@@ -106,14 +121,15 @@ Only the selected result increments the main iteration counter.
 | Aspect | `research-results.tsv` | `autoresearch-state.json` |
 |--------|----------------------|--------------------------|
 | **Purpose** | Full audit trail of every iteration | Compact snapshot for fast resume |
-| **Content** | One row per iteration with description | Aggregated counters and config |
+| **Content** | One main row per iteration, plus optional worker detail rows | Aggregated counters and config |
 | **Recovery role** | Fallback when JSON is missing | Primary recovery source |
-| **Cross-validation** | Row count must match JSON `state.iteration` | `state.current_metric` must match last TSV row metric |
+| **Cross-validation** | Reconstruct retained state from integer main rows | Must match the reconstructed retained state |
 
 ### Consistency Rules
 
-- **Row count match:** TSV data row count (excluding comments and header) must equal `state.iteration` exactly. No tolerance. Off-by-one triggers Recovery Priority 2 (mini-wizard).
-- **Metric match:** `state.current_metric` must equal the last TSV row's metric value. For integer metrics, exact match required. For floating-point metrics, tolerance is 0.1% relative or 0.001 absolute, whichever is larger.
-- **Parallel batch rows:** When parallel mode is active, all worker rows (5a, 5b, 5c) count toward TSV row total, but JSON `state.iteration` only reflects the main counter. Cross-validation accounts for this: expected TSV rows = `state.iteration` + (total_parallel_worker_rows - total_parallel_batches).
+- **Main iteration match:** `state.iteration` must equal the highest integer iteration label in the TSV.
+- **Retained metric match:** `state.current_metric` must equal the retained metric after replaying the integer main rows. After a `discard`, the TSV row records the attempted metric, but `state.current_metric` stays at the last kept metric.
+- **Last trial match:** `state.last_trial_metric` must equal the metric on the latest integer main row.
+- **Parallel tolerance:** Worker rows (`5a`, `5b`, `5c`) are ignored for `state.iteration` matching. They provide audit detail only.
 
-During session resume, the recovery logic compares the TSV row count against `state.iteration` in the JSON file. A mismatch triggers a mini-wizard for confirmation rather than a silent full resume. This cross-validation prevents stale or partial state from causing silent divergence.
+During session resume, `python3 scripts/autoresearch_resume_check.py` reconstructs the retained state from the TSV and compares it with `autoresearch-state.json`. Any mismatch triggers a mini-wizard rather than a silent full resume.

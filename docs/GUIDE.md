@@ -53,6 +53,8 @@ Codex: I found 47 `any` occurrences across src/**/*.ts.
 
 The wizard runs for at most 5 rounds. It always asks at least one confirming question, even when it could infer everything.
 
+For unattended runs, the wizard may also ask one safety question about rollback or workspace isolation before launch. After you say "go," it stays silent.
+
 ### Phase 2: Execution (fully autonomous)
 
 Once you say "go" (or "start", "launch", or any clear approval), the loop takes over. From this point on, Codex will never pause to ask you anything. If it hits ambiguity, it applies best practices and keeps going. You can walk away, go to sleep, or work on something else.
@@ -98,7 +100,14 @@ Every iterating mode (loop, debug, fix, security) shares the same cycle:
 6. **Decide** -- metric improved and guard passed = keep; otherwise revert
 7. **Log** -- append result to `research-results.tsv`
 
-Revert uses `git reset --hard HEAD~1`. If that fails for any reason, falls back to `git revert --no-edit HEAD`.
+Revert uses the rollback strategy approved during setup. In a dedicated experiment branch/worktree with pre-launch approval, it may use `git reset --hard HEAD~1`; otherwise it uses `git revert --no-edit HEAD`.
+
+Run artifacts should be updated by the helper scripts rather than hand-editing TSV or JSON:
+
+- `python3 scripts/autoresearch_init_run.py`
+- `python3 scripts/autoresearch_record_iteration.py`
+- `python3 scripts/autoresearch_resume_check.py`
+- `python3 scripts/autoresearch_select_parallel_batch.py`
 
 ### Verify and Guard: two gates, two questions
 
@@ -411,6 +420,8 @@ Progress summaries print every 5 iterations. Bounded runs print a final baseline
 
 The TSV file is the real audit trail -- not the git history (failed experiments are reverted from git but preserved in the log).
 
+`research-results.tsv`, `autoresearch-state.json`, and `autoresearch-lessons.md` are treated as autoresearch-owned artifacts: they stay uncommitted and are not staged as experiment changes.
+
 ---
 
 ## Workspace Requirements
@@ -443,7 +454,7 @@ If unrelated uncommitted changes exist:
 | Concern | How it is handled |
 |---------|-------------------|
 | Dirty worktree | Loop refuses to start; suggests plan mode or clean branch |
-| Failed change | `git reset --hard HEAD~1` keeps history clean; results log is the audit trail |
+| Failed change | Uses the rollback strategy approved before launch: approved hard reset in an isolated experiment branch/worktree, otherwise `git revert --no-edit HEAD`; results log is the audit trail |
 | Guard failure | Up to 2 rework attempts before discarding |
 | Syntax error | Auto-fix immediately, does not count as iteration |
 | Runtime crash | Up to 3 fix attempts, then skip |
@@ -529,7 +540,7 @@ This data filters infeasible hypotheses (e.g., no GPU optimization without a GPU
 
 Non-interactive mode for automation pipelines. Differences from interactive mode:
 
-- No wizard -- all config provided upfront via flags or environment variables
+- No wizard -- all config provided upfront in the `codex exec` prompt or via environment variables
 - Always bounded (Iterations field is mandatory)
 - JSON output (one line per iteration, completion summary at end)
 - No web search, no parallel, no session resume

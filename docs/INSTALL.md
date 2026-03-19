@@ -66,7 +66,7 @@ Expected behavior:
 
 - Codex recognizes the skill,
 - loads `SKILL.md`,
-- loads the plan workflow,
+- loads the relevant workflow for the request,
 - and collects any missing fields via the wizard.
 
 ## Updating

@@ -89,7 +89,7 @@ See [INSTALL.md](docs/INSTALL.md) for more install options. See [GUIDE.md](docs/
 
 ## What It Does
 
-A Codex skill that runs a modify-verify-decide loop on your codebase. Each iteration makes one atomic change, verifies it against a mechanical metric, and keeps or discards the result. Progress accumulates in git; failures auto-revert. Works with any language, any framework, any measurable target.
+A Codex skill that runs a modify-verify-decide loop on your codebase. Each iteration makes one atomic change, verifies it against a mechanical metric, and keeps or discards the result. Progress accumulates in git; failures auto-revert. Best for unattended runs where you want Codex to keep pushing toward a measurable result for minutes, hours, or overnight.
 
 Inspired by [Karpathy's autoresearch](https://github.com/karpathy/autoresearch) principles, generalized beyond ML.
 
@@ -182,7 +182,7 @@ LOOP (forever or N times):
   3. Make ONE atomic change
   4. git commit (before verification)
   5. Run mechanical verification + guard
-  6. Improved -> keep (extract lesson). Worse -> git reset. Crashed -> fix or skip.
+  6. Improved -> keep (extract lesson). Worse -> approved rollback strategy. Crashed -> fix or skip.
   7. Log the result
   8. Health check (disk, git, verify health)
   9. If 3+ discards -> REFINE; 5+ -> PIVOT; 2 PIVOTs -> web search
@@ -440,9 +440,9 @@ If Codex detects a prior interrupted run, it can resume from the last consistent
 
 Recovery priority:
 
-1. **JSON + TSV consistent:** resume immediately, skip wizard
-2. **JSON valid, TSV mismatch:** mini-wizard (1 round) to re-confirm
-3. **JSON missing, TSV exists:** legacy TSV-only recovery
+1. **JSON + TSV summary consistent:** resume immediately, skip wizard
+2. **JSON valid, helper reports mismatch:** mini-wizard (1 round) to re-confirm
+3. **JSON missing, TSV exists:** helper reconstructs retained state from TSV
 4. **JSON corrupt:** rename to `.bak`, fall back to TSV
 5. **Neither exists:** fresh start (old logs renamed)
 
@@ -457,11 +457,17 @@ Non-interactive mode for automation pipelines. All config is provided upfront --
 ```yaml
 # GitHub Actions example
 - name: Autoresearch optimization
-  run: codex exec --skill codex-autoresearch
-         --goal "Reduce type errors" --scope "src/**/*.ts"
-         --metric "type error count" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 Exit codes: 0 = improved, 1 = no improvement, 2 = hard blocker.
@@ -474,7 +480,7 @@ See `references/exec-workflow.md`.
 
 Every iteration is recorded in two complementary formats:
 
-- **`research-results.tsv`** -- full audit trail, one row per iteration
+- **`research-results.tsv`** -- full audit trail, with one main row per iteration plus optional parallel worker rows
 - **`autoresearch-state.json`** -- compact state snapshot for fast session resume
 
 ```
@@ -485,7 +491,14 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Both files stay uncommitted. On session resume, the JSON state is cross-validated against TSV row counts to detect inconsistencies. Progress summaries print every 5 iterations. Bounded runs print a final baseline-to-best summary.
+Both files stay uncommitted and are treated as autoresearch-owned artifacts, not normal experiment diffs. On session resume, the JSON state is cross-validated against a reconstructed TSV main-iteration summary instead of raw row counts. Progress summaries print every 5 iterations. Bounded runs print a final baseline-to-best summary.
+
+Stateful artifact updates are backed by four helper scripts:
+
+- `scripts/autoresearch_init_run.py`
+- `scripts/autoresearch_record_iteration.py`
+- `scripts/autoresearch_resume_check.py`
+- `scripts/autoresearch_select_parallel_batch.py`
 
 ---
 
@@ -494,7 +507,7 @@ Both files stay uncommitted. On session resume, the JSON state is cross-validate
 | Concern | How it is handled |
 |---------|-------------------|
 | Dirty worktree | Loop refuses to start; suggests `plan` mode or clean branch |
-| Failed change | `git reset --hard HEAD~1` keeps history clean; results log is the audit trail |
+| Failed change | Uses the rollback strategy approved before launch: approved hard reset in an isolated experiment branch/worktree, otherwise `git revert --no-edit HEAD`; results log remains the audit trail |
 | Guard failure | Up to 2 rework attempts before discarding |
 | Syntax error | Auto-fix immediately, does not count as iteration |
 | Runtime crash | Up to 3 fix attempts, then skip |
@@ -535,6 +548,13 @@ codex-autoresearch/
       README_RU.md                  # Russian
   scripts/
     validate_skill_structure.sh     # structure validator
+    autoresearch_helpers.py         # shared TSV/JSON helpers
+    autoresearch_init_run.py        # initialize baseline log + state
+    autoresearch_record_iteration.py # append one main iteration + update state
+    autoresearch_resume_check.py    # decide full_resume / mini_wizard / fallback
+    autoresearch_select_parallel_batch.py # log worker rows + batch winner
+  tests/
+    test_autoresearch_scripts.py    # stdlib smoke tests for helper scripts
   references/
     core-principles.md              # universal principles
     autonomous-loop-protocol.md     # loop protocol specification

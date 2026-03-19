@@ -457,11 +457,17 @@ security + fix               # 审计并修复一步到位
 ```yaml
 # GitHub Actions 示例
 - name: Autoresearch 优化
-  run: codex exec --skill codex-autoresearch
-         --goal "减少类型错误" --scope "src/**/*.ts"
-         --metric "类型错误数量" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 退出码：0 = 已改善，1 = 无改善，2 = 硬阻塞。
@@ -474,7 +480,7 @@ security + fix               # 审计并修复一步到位
 
 每次迭代以两种互补格式记录：
 
-- **`research-results.tsv`** -- 完整审计跟踪，每次迭代一行
+- **`research-results.tsv`** -- 完整审计跟踪，每次迭代一个主行，必要时附带并行 worker 行
 - **`autoresearch-state.json`** -- 用于快速会话恢复的紧凑状态快照
 
 ```
@@ -485,7 +491,7 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-两个文件都不提交到 git。会话恢复时，JSON 状态与 TSV 行数交叉验证以检测不一致。进度摘要每 5 次迭代打印一次。有界运行在最后打印基线到最优的总结。
+两个文件都不提交到 git。会话恢复时，JSON 状态会与重建出的 TSV 主迭代摘要交叉验证，而不是直接对比行数。进度摘要每 5 次迭代打印一次。有界运行在最后打印基线到最优的总结。
 
 ---
 
@@ -494,7 +500,7 @@ iteration  commit   metric  delta   status    description
 | 问题 | 处理方式 |
 |------|---------|
 | 脏工作树 | 拒绝启动；建议使用 plan 模式或干净分支 |
-| 失败的更改 | `git reset --hard HEAD~1` 保持历史干净；结果日志是审计记录 |
+| 失败的更改 | 使用启动前确认过的回滚策略：隔离实验分支/工作树中可用已批准的 `git reset --hard HEAD~1`，否则使用 `git revert --no-edit HEAD`；结果日志仍是审计记录 |
 | 守护失败 | 最多 2 次修复尝试后丢弃 |
 | 语法错误 | 立即自动修复，不计入迭代 |
 | 运行时崩溃 | 最多 3 次修复尝试，然后跳过 |

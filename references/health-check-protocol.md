@@ -11,10 +11,10 @@ Run between Phase 8 (Log) and Phase 9 (Repeat):
 | Check | How | Failure Action |
 |-------|-----|----------------|
 | Disk space | `df -m . \| awk 'NR==2{print $4}'` >= 500MB | Warning at <1GB, hard blocker at <500MB |
-| Git state | `git status --porcelain` shows only expected files | Warning if unexpected files; hard blocker if repo is corrupt |
+| Git state | `git status --porcelain` shows only expected files and autoresearch-owned artifacts | Warning if unexpected files; hard blocker if repo is corrupt |
 | Verify health | Last verify completed without timeout or crash | Warning if last 2 verifies timed out; hard blocker if verify command missing |
-| Log integrity | Results TSV has expected number of rows | Hard blocker if rows are missing or file is corrupt |
-| JSON state integrity | `autoresearch-state.json` exists, is valid JSON, and `state.iteration` matches TSV row count | Warning if mismatch; attempt re-write from TSV data. Hard blocker if both TSV and JSON are corrupt |
+| Log integrity | `python3 scripts/autoresearch_resume_check.py` can reconstruct TSV state | Hard blocker if the TSV is corrupt |
+| JSON state integrity | Resume helper reports `full_resume` or a recoverable fallback | Warning on divergence; optionally rewrite state from TSV. Hard blocker if both TSV and JSON are unusable |
 | Wall-clock | Current iteration time vs rolling average | Warning if >3x average (possible resource contention) |
 
 ### Every 10 Iterations (Deep Check)
@@ -94,5 +94,5 @@ Thresholds:
 - **environment-awareness.md:** Initial probes establish baselines for drift detection.
 - **parallel-experiments-protocol.md:** Check worktree health before each parallel batch.
 - **results-logging.md:** Health warnings are logged in the description column.
-- **session-resume-protocol.md:** JSON state integrity check ensures `autoresearch-state.json` stays consistent with TSV for reliable session recovery.
+- **session-resume-protocol.md:** JSON/TSV integrity checks use the resume helper instead of raw row-count heuristics.
 - **SKILL.md:** Listed in the load order for iterating modes.

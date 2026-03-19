@@ -210,23 +210,25 @@ Parallel iterations use a batch notation:
 
 ```tsv
 iteration	commit	metric	delta	guard	status	description
-5a	abc1234	38	-3	pass	keep	[PARALLEL worker-a] narrowed auth types (SELECTED)
+5a	abc1234	38	-3	pass	keep	[PARALLEL worker-a] narrowed auth types
 5b	-	42	+1	pass	discard	[PARALLEL worker-b] wrapper approach
-5c	-	40	-1	fail	discard	[PARALLEL worker-c] union types (guard fail)
+5c	-	41	0	-	crash	[PARALLEL worker-c] timeout after 20m
+5	abc1234	38	-3	pass	keep	[PARALLEL batch] selected worker-a: narrowed auth types
 ```
 
-- The selected result gets the real iteration number for tracking.
-- Non-selected results are logged but do not increment the main iteration counter.
+- Worker rows (`5a`, `5b`, `5c`) are audit detail.
+- The integer main row (`5`) is the authoritative retained-state update for the whole batch.
+- Prefer `python3 scripts/autoresearch_select_parallel_batch.py --batch-file ...` so worker rows, main row, and JSON state stay aligned.
 
 ### JSON State Update for Parallel Batches
 
 After a parallel batch completes and the best result is merged (or all results are discarded):
 
 1. Update `autoresearch-state.json` once per batch, not once per worker.
-2. Increment `state.iteration` by 1 (the batch counts as a single iteration).
-3. Set `state.current_metric` to the selected worker's metric (or unchanged if all discarded).
-4. Update `state.keeps`/`state.discards` -- a batch with one selected result counts as 1 keep; a batch with zero selected results counts as 1 discard.
-5. All worker rows appear in TSV (5a, 5b, 5c), but the JSON `state.iteration` reflects only the main counter (5, not 5c).
+2. Increment `state.iteration` by 1 (the batch counts as a single main iteration).
+3. Set `state.current_metric` to the selected worker's metric, or leave it unchanged if all workers are discarded.
+4. Set `state.last_trial_metric` to the batch's selected metric, or to the best discarded attempt if no worker is kept.
+5. Count the batch as 1 keep or 1 discard regardless of worker count.
 
 ## Fallback to Serial
 

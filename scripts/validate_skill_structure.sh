@@ -13,6 +13,7 @@ required_paths=(
   "$ROOT/docs/i18n/README_ZH.md"
   "$ROOT/references"
   "$ROOT/agents/openai.yaml"
+  "$ROOT/tests"
 )
 
 # Core reference files
@@ -39,6 +40,15 @@ required_references=(
   "$ROOT/references/hypothesis-perspectives.md"
 )
 
+required_scripts=(
+  "$ROOT/scripts/validate_skill_structure.sh"
+  "$ROOT/scripts/autoresearch_helpers.py"
+  "$ROOT/scripts/autoresearch_init_run.py"
+  "$ROOT/scripts/autoresearch_record_iteration.py"
+  "$ROOT/scripts/autoresearch_resume_check.py"
+  "$ROOT/scripts/autoresearch_select_parallel_batch.py"
+)
+
 for path in "${required_paths[@]}"; do
   if [[ ! -e "$path" ]]; then
     echo "Missing required path: $path" >&2
@@ -49,6 +59,13 @@ done
 for path in "${required_references[@]}"; do
   if [[ ! -e "$path" ]]; then
     echo "Missing required reference: $path" >&2
+    exit 1
+  fi
+done
+
+for path in "${required_scripts[@]}"; do
+  if [[ ! -e "$path" ]]; then
+    echo "Missing required script: $path" >&2
     exit 1
   fi
 done

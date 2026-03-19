@@ -1,6 +1,6 @@
 # Contributing to codex-autoresearch
 
-This project is a collection of Markdown files that together form a Codex skill. There is no code to compile, no tests to run, no dependencies to install. You edit `.md` files, point Codex at the skill directory, and observe behavior.
+This project is a Markdown-first Codex skill with a small set of helper scripts and stdlib tests. There is still no build step and no runtime dependency installation. Most changes are `.md` edits, but stateful behavior now also lives in `scripts/` and is validated by `tests/`.
 
 ## How the skill is structured
 
@@ -31,7 +31,7 @@ This progressive disclosure means Codex only reads what it needs. A loop-mode in
 The user-facing documentation lives in separate files:
 
 ```
-README.md / docs/i18n/README_ZH.md   -- public overview
+README.md / docs/i18n/README_*.md    -- public overview
 docs/GUIDE.md                        -- operator's manual
 docs/EXAMPLES.md                     -- real-world recipes
 docs/INSTALL.md                      -- installation options
@@ -49,7 +49,7 @@ ln -s /path/to/your/fork your-project/.agents/skills/codex-autoresearch
 
 3. Open Codex in the test project, type `$codex-autoresearch`, and verify the skill activates.
 
-4. Make your changes. Test by invoking the skill in different scenarios.
+4. Make your changes. Test by invoking the skill in different scenarios. If you changed anything in `scripts/` or state semantics, also run the stdlib test suite.
 
 5. When satisfied, remove the symlink and submit a PR.
 
@@ -135,9 +135,10 @@ Keep PRs focused. One logical change per PR.
 
 ```bash
 bash scripts/validate_skill_structure.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-This checks that all required files exist and the SKILL.md frontmatter is valid.
+This checks that the required files exist, the helper scripts are present, and the script interfaces still behave end to end.
 
 For behavioral validation, there is no automated test suite. The skill is Markdown instructions -- the only way to test is to use it. Symlink your branch, invoke the skill with various prompts, and verify Codex follows the updated instructions.
 
@@ -152,7 +153,7 @@ Edge cases worth trying:
 - **Progressive disclosure** is intentional. Do not move reference content into SKILL.md. The entrypoint should stay small.
 - **The two-phase boundary** is a core design constraint. Everything before "go" can ask the user. Everything after "go" must be fully autonomous.
 - **Natural language is the primary interface.** Users should never need to know field names or write structured config. The wizard handles translation.
-- **`git reset --hard HEAD~1`** is the primary rollback mechanism. The results TSV is the audit trail.
+- **Rollback must match the pre-launch approval.** In an isolated experiment branch/worktree, approved `git reset --hard HEAD~1` is allowed; otherwise use `git revert --no-edit HEAD`.
 - **Lessons are additive.** Cross-run learning persists across sessions. Never delete lessons without user consent.
 - **PIVOT/REFINE replaces brute-force retrying.** Stuck recovery should always escalate through the defined ladder.
 

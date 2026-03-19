@@ -36,7 +36,7 @@ ALWAYS ask at least one round of questions, even when the goal seems obvious. Us
 | Target | Assume "as high as possible" | "Coverage is at 58% now. What's your target -- 80%? 90%? Or just push as high as I can?" |
 | Verify command | Silently pick pytest | "I can run `pytest --cov=src` to measure coverage. Does that work, or do you use a different runner?" |
 | Guard | Skip it | "Should I make sure `tsc --noEmit` still passes after each change?" |
-| Duration | Assume unlimited | "Want me to run 10 iterations as a test, or let it go overnight?" |
+| Duration | Assume unlimited | "Want me to run 10 iterations as a test, or keep iterating until you interrupt me?" |
 
 Rules:
 - Each round must add new information. Never ask the same question twice.
@@ -119,8 +119,10 @@ Categorized questions for common autoresearch scenarios. Pick 1-3 that are actua
 ### Duration & Strategy
 
 - "Want me to run 10 iterations as a test, or let it go overnight?"
+- "Should this be an unattended run that keeps going until you interrupt it, or a bounded trial run?"
 - "Should I focus on quick wins first, or go straight for the biggest impact?"
 - "If I get stuck after several attempts, should I try bolder architectural changes, or stop and report?"
+- "If failed iterations need rollback, may I use destructive rollback inside a dedicated experiment branch/worktree so I do not have to stop and ask mid-run?"
 
 ### Parallel & Search
 
@@ -167,6 +169,7 @@ The wizard internally maps the conversation to these fields (the user never sees
 - Verify -- Codex proposes a command based on repo tooling
 - Guard (optional) -- Codex suggests if there's a regression risk
 - Iterations (optional) -- asked only if user wants bounded run
+- Rollback (optional) -- ask only if destructive rollback may be needed for unattended execution; otherwise default to non-destructive revert
 - Parallel (optional) -- ask if environment supports it (CPU >= 4, RAM >= 8GB)
 - Web search (optional) -- ask if user wants web search when stuck
 - Lessons (optional) -- enabled by default, ask only if user wants to disable
@@ -201,7 +204,7 @@ The wizard internally maps the conversation to these fields (the user never sees
 
 ### exec
 
-Exec mode does NOT use the wizard. All fields must be provided at invocation time via flags or environment variables. If any required field is missing, exec mode fails immediately with exit code 2. See `references/exec-workflow.md`.
+Exec mode does NOT use the wizard. All fields must be provided at invocation time in the `codex exec` prompt or via environment variables. If any required field is missing, exec mode fails immediately with exit code 2. See `references/exec-workflow.md`.
 
 ## Validation Rules
 
@@ -228,7 +231,7 @@ When `session-resume-protocol.md` detects a prior run with a valid `autoresearch
 
 1. Show what was detected:
    - Prior run tag, iteration count, best metric, and last status from the JSON state.
-   - The specific inconsistency (e.g., TSV row count mismatch).
+   - The specific inconsistency reported by `scripts/autoresearch_resume_check.py` (for example retained-metric mismatch, missing main row, or stale counters).
 2. Ask exactly one question with two choices:
    - **Resume:** use the JSON `config` as the authoritative source. Briefly confirm scope, metric, and verify command in a single confirmation block.
    - **Fresh start:** rename old artifacts with `.prev` suffixes and proceed with the full wizard.

@@ -9,7 +9,7 @@ Use this mode when codex-autoresearch is invoked from a CI job, cron task, or au
 ## Trigger
 
 - `$codex-autoresearch Mode: exec`
-- `codex exec` with autoresearch skill context
+- `codex exec` prompt that explicitly invokes `$codex-autoresearch` in `Mode: exec`
 - Environment variable: `AUTORESEARCH_MODE=exec`
 
 ## Required Config (All Upfront)
@@ -27,6 +27,8 @@ All fields must be provided at invocation time. There is no wizard fallback.
 | Iterations | yes (always bounded) | prompt or env `AUTORESEARCH_ITERATIONS` |
 
 If any required field is missing, exit immediately with code 2 and a JSON error.
+
+In Codex CLI, `codex exec` accepts a prompt. Do not assume a skill-specific `--skill` flag exists; invoke the skill in the prompt itself.
 
 ## Behavior Differences from Interactive Mode
 
@@ -87,13 +89,16 @@ If any required field is missing, exit immediately with code 2 and a JSON error.
 ```yaml
 - name: Autoresearch optimization
   run: |
-    codex exec --skill codex-autoresearch \
-      --goal "Reduce type errors" \
-      --scope "src/**/*.ts" \
-      --metric "type error count" \
-      --direction lower \
-      --verify "tsc --noEmit 2>&1 | grep -c error" \
-      --iterations 20
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
   continue-on-error: true
 ```
 
@@ -102,14 +107,18 @@ If any required field is missing, exit immediately with code 2 and a JSON error.
 ```yaml
 optimize:
   script:
-    - codex exec --skill codex-autoresearch
-        --goal "Raise test coverage"
-        --scope "src/"
-        --metric "coverage percentage"
-        --direction higher
-        --verify "pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'"
-        --guard "ruff check ."
-        --iterations 15
+    - |
+      codex exec <<'PROMPT'
+      $codex-autoresearch
+      Mode: exec
+      Goal: Raise test coverage
+      Scope: src/
+      Metric: coverage percentage
+      Direction: higher
+      Verify: pytest --cov=src --cov-report=term 2>&1 | grep TOTAL | awk '{print $NF}'
+      Guard: ruff check .
+      Iterations: 15
+      PROMPT
   allow_failure: true
 ```
 

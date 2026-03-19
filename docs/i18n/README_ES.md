@@ -457,11 +457,17 @@ Modo no interactivo para pipelines de automatizacion. Toda la configuracion se p
 ```yaml
 # Ejemplo de GitHub Actions
 - name: Optimizacion con Autoresearch
-  run: codex exec --skill codex-autoresearch
-         --goal "Reduce type errors" --scope "src/**/*.ts"
-         --metric "type error count" --direction lower
-         --verify "tsc --noEmit 2>&1 | grep -c error"
-         --iterations 20
+  run: |
+    codex exec <<'PROMPT'
+    $codex-autoresearch
+    Mode: exec
+    Goal: Reduce type errors
+    Scope: src/**/*.ts
+    Metric: type error count
+    Direction: lower
+    Verify: tsc --noEmit 2>&1 | grep -c error
+    Iterations: 20
+    PROMPT
 ```
 
 Codigos de salida: 0 = mejoro, 1 = sin mejora, 2 = bloqueo duro.
@@ -474,7 +480,7 @@ Consulta `references/exec-workflow.md`.
 
 Cada iteracion se registra en dos formatos complementarios:
 
-- **`research-results.tsv`** -- pista de auditoria completa, una fila por iteracion
+- **`research-results.tsv`** -- pista de auditoria completa, con una fila principal por iteracion y filas worker paralelas cuando haga falta
 - **`autoresearch-state.json`** -- instantanea de estado compacta para reanudacion rapida de sesion
 
 ```
@@ -485,7 +491,7 @@ iteration  commit   metric  delta   status    description
 3          c3d4e5f  38      -3      keep      type-narrow API response handlers
 ```
 
-Ambos archivos no se commitean en git. Durante la reanudacion de sesion, el estado JSON se valida cruzadamente con el conteo de filas TSV para detectar inconsistencias. Los resumenes de progreso se imprimen cada 5 iteraciones. Las ejecuciones acotadas imprimen un resumen final de linea base a mejor resultado.
+Ambos archivos no se commitean en git. Durante la reanudacion de sesion, el estado JSON se valida cruzadamente con un resumen reconstruido de las iteraciones principales TSV, no con el simple conteo de filas. Los resumenes de progreso se imprimen cada 5 iteraciones. Las ejecuciones acotadas imprimen un resumen final de linea base a mejor resultado.
 
 ---
 
@@ -494,7 +500,7 @@ Ambos archivos no se commitean en git. Durante la reanudacion de sesion, el esta
 | Preocupacion | Como se maneja |
 |--------------|----------------|
 | Directorio de trabajo sucio | El bucle se niega a iniciar; sugiere modo `plan` o rama limpia |
-| Cambio fallido | `git reset --hard HEAD~1` mantiene el historial limpio; el registro de resultados es la pista de auditoria |
+| Cambio fallido | Usa la estrategia de rollback aprobada antes del arranque: `git reset --hard HEAD~1` solo en una rama/worktree experimental aislada y aprobada; en caso contrario usa `git revert --no-edit HEAD`; el registro de resultados sigue siendo la pista de auditoria |
 | Fallo de Guard | Hasta 2 intentos de reajuste, luego revierte |
 | Error de sintaxis | Reparacion inmediata, no cuenta como iteracion |
 | Crash en tiempo de ejecucion | Hasta 3 intentos de reparacion, luego salta |
