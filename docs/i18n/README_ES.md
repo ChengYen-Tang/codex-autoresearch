@@ -391,7 +391,7 @@ security + fix               # auditar y remediar en un solo paso
 
 ## Aprendizaje entre ejecuciones
 
-Cada ejecucion extrae lecciones estructuradas -- que funciono, que fallo y por que. Las lecciones se almacenan en `autoresearch-lessons.md` (sin commit, como el registro de resultados) y se consultan al inicio de ejecuciones futuras para sesgar la generacion de hipotesis hacia estrategias probadas y lejos de callejones sin salida conocidos.
+Cada ejecucion iterativa salvo `exec` extrae lecciones estructuradas -- que funciono, que fallo y por que. Las lecciones se almacenan en `autoresearch-lessons.md` (sin commit, como el registro de resultados) y se consultan al inicio de ejecuciones futuras para sesgar la generacion de hipotesis hacia estrategias probadas y lejos de callejones sin salida conocidos. El modo `exec` puede leer las lecciones existentes, pero no las crea ni las actualiza.
 
 - Lecciones positivas despues de cada iteracion conservada
 - Lecciones estrategicas despues de cada decision PIVOT
@@ -578,7 +578,7 @@ codex-autoresearch/
 
 **Cuantas iteraciones?** Depende de la tarea. 5 para correcciones dirigidas, 10-20 para exploracion, ilimitadas para ejecuciones nocturnas.
 
-**Aprende entre ejecuciones?** Si. Las lecciones se extraen despues de cada ejecucion y se consultan al inicio de la siguiente. El archivo de lecciones persiste entre sesiones.
+**Aprende entre ejecuciones?** Si. Las lecciones se extraen despues de cada ejecucion iterativa salvo `exec` y se consultan al inicio de la siguiente. El archivo de lecciones persiste entre sesiones; `exec` solo lee las lecciones existentes.
 
 **Puede reanudar despues de una interrupcion?** Si. En la siguiente invocacion, detecta la ejecucion anterior y reanuda desde el ultimo estado consistente.
 

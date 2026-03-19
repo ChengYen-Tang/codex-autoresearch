@@ -392,7 +392,7 @@ security + fix               # auditer et corriger en une seule passe
 
 ## Apprentissage inter-executions
 
-Chaque execution extrait des lecons structurees -- ce qui a fonctionne, ce qui a echoue, et pourquoi. Les lecons sont conservees dans `autoresearch-lessons.md` (non commite, comme le journal des resultats) et consultees au demarrage des executions futures pour orienter la generation d'hypotheses vers les strategies eprouvees et eviter les impasses connues.
+Chaque execution iterative sauf `exec` extrait des lecons structurees -- ce qui a fonctionne, ce qui a echoue, et pourquoi. Les lecons sont conservees dans `autoresearch-lessons.md` (non commite, comme le journal des resultats) et consultees au demarrage des executions futures pour orienter la generation d'hypotheses vers les strategies eprouvees et eviter les impasses connues. Le mode `exec` peut lire les lecons existantes, mais ne les cree ni ne les met a jour.
 
 - Lecons positives apres chaque iteration conservee
 - Lecons strategiques apres chaque decision PIVOT
@@ -579,7 +579,7 @@ codex-autoresearch/
 
 **Combien d'iterations ?** Cela depend de la tache. 5 pour les corrections ciblees, 10-20 pour l'exploration, illimite pour les executions de nuit.
 
-**Apprend-il d'une execution a l'autre ?** Oui. Les lecons sont extraites apres chaque execution et consultees au demarrage de la suivante. Le fichier de lecons persiste entre les sessions.
+**Apprend-il d'une execution a l'autre ?** Oui. Les lecons sont extraites apres chaque execution iterative sauf `exec` et consultees au demarrage de la suivante. Le fichier de lecons persiste entre les sessions ; `exec` ne fait que lire les lecons existantes.
 
 **Peut-il reprendre apres une interruption ?** Oui. Lors de l'invocation suivante, il detecte l'execution precedente et reprend a partir du dernier etat coherent.
 

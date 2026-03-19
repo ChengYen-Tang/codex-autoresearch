@@ -439,13 +439,13 @@ If unrelated uncommitted changes exist:
 
 | Mode | What it produces |
 |------|------------------|
-| loop | `research-results.tsv`, `autoresearch-lessons.md` |
+| loop | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json` |
 | plan | Config block printed inline (ready to paste) |
-| debug | `debug/{YYMMDD}-{HHMM}-{slug}/` directory with findings |
-| fix | `fix/{YYMMDD}-{HHMM}-{slug}/` directory with fix log |
-| security | `security/{YYMMDD}-{HHMM}-{slug}/` directory with audit report |
-| ship | `ship/{YYMMDD}-{HHMM}-{slug}/` directory with checklist and verification |
-| exec | JSON lines to stdout, exit code |
+| debug | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `debug/{YYMMDD}-{HHMM}-{slug}/` findings |
+| fix | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `fix/{YYMMDD}-{HHMM}-{slug}/` fix log |
+| security | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `security/{YYMMDD}-{HHMM}-{slug}/` audit report |
+| ship | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `ship/{YYMMDD}-{HHMM}-{slug}/` checklist and verification |
+| exec | `research-results.tsv`, JSON lines to stdout, exit code |
 
 ---
 
@@ -470,7 +470,7 @@ If unrelated uncommitted changes exist:
 
 ## Cross-Run Learning
 
-Every run extracts structured lessons and persists them to `autoresearch-lessons.md` (alongside the results log, never committed). Future runs consult lessons to bias hypothesis generation.
+Every iterating run except `exec` extracts structured lessons and persists them to `autoresearch-lessons.md` (alongside the results log, never committed). Future runs consult lessons to bias hypothesis generation. `exec` may read existing lessons, but it does not create or update them.
 
 How it works:
 - After every kept iteration: positive lesson (what worked and why)

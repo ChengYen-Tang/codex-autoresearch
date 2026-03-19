@@ -391,7 +391,7 @@ security + fix               # Audit und Behebung in einem Durchgang
 
 ## Laufuebergreifendes Lernen
 
-Jeder Lauf extrahiert strukturierte Erkenntnisse -- was funktioniert hat, was fehlgeschlagen ist und warum. Erkenntnisse werden in `autoresearch-lessons.md` gespeichert (nicht committet, wie das Ergebnisprotokoll) und zu Beginn zukuenftiger Laeufe herangezogen, um die Hypothesengenerierung in Richtung bewaehrter Strategien und weg von bekannten Sackgassen zu lenken.
+Jeder iterative Lauf ausser `exec` extrahiert strukturierte Erkenntnisse -- was funktioniert hat, was fehlgeschlagen ist und warum. Erkenntnisse werden in `autoresearch-lessons.md` gespeichert (nicht committet, wie das Ergebnisprotokoll) und zu Beginn zukuenftiger Laeufe herangezogen, um die Hypothesengenerierung in Richtung bewaehrter Strategien und weg von bekannten Sackgassen zu lenken. Der Modus `exec` kann vorhandene Erkenntnisse lesen, erstellt oder aktualisiert sie aber nicht.
 
 - Positive Erkenntnisse nach jeder beibehaltenen Iteration
 - Strategische Erkenntnisse nach jeder PIVOT-Entscheidung
@@ -578,7 +578,7 @@ codex-autoresearch/
 
 **Wie viele Iterationen?** Haengt von der Aufgabe ab. 5 fuer gezielte Korrekturen, 10-20 fuer Exploration, unbegrenzt fuer Nachtlaeufe.
 
-**Lernt es ueber Laeufe hinweg?** Ja. Nach jedem Lauf werden Erkenntnisse extrahiert und zu Beginn des naechsten Laufs herangezogen. Die Erkenntnisdatei bleibt ueber Sitzungen hinweg erhalten.
+**Lernt es ueber Laeufe hinweg?** Ja. Nach jedem iterativen Lauf ausser `exec` werden Erkenntnisse extrahiert und zu Beginn des naechsten Laufs herangezogen. Die Erkenntnisdatei bleibt ueber Sitzungen hinweg erhalten; `exec` liest nur vorhandene Erkenntnisse.
 
 **Kann es nach einer Unterbrechung fortfahren?** Ja. Beim naechsten Aufruf erkennt es den vorherigen Lauf und setzt vom letzten konsistenten Zustand fort.
 

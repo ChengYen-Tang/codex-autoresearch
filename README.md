@@ -391,7 +391,7 @@ security + fix               # audit and remediate in one pass
 
 ## Cross-Run Learning
 
-Every run extracts structured lessons -- what worked, what failed, and why. Lessons are persisted in `autoresearch-lessons.md` (uncommitted, like the results log) and consulted at the start of future runs to bias hypothesis generation toward proven strategies and away from known dead ends.
+Every iterating run except `exec` extracts structured lessons -- what worked, what failed, and why. Lessons are persisted in `autoresearch-lessons.md` (uncommitted, like the results log) and consulted at the start of future runs to bias hypothesis generation toward proven strategies and away from known dead ends. `exec` mode may read existing lessons, but it never creates or updates them.
 
 - Positive lessons after every kept iteration
 - Strategic lessons after every PIVOT decision

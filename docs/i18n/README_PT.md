@@ -391,7 +391,7 @@ security + fix               # auditar e remediar em um so passo
 
 ## Aprendizado entre execucoes
 
-Cada execucao extrai licoes estruturadas -- o que funcionou, o que falhou e por que. As licoes sao armazenadas em `autoresearch-lessons.md` (sem commit, como o registro de resultados) e consultadas no inicio de execucoes futuras para direcionar a geracao de hipoteses para estrategias comprovadas e para longe de becos sem saida conhecidos.
+Cada execucao iterativa, exceto `exec`, extrai licoes estruturadas -- o que funcionou, o que falhou e por que. As licoes sao armazenadas em `autoresearch-lessons.md` (sem commit, como o registro de resultados) e consultadas no inicio de execucoes futuras para direcionar a geracao de hipoteses para estrategias comprovadas e para longe de becos sem saida conhecidos. O modo `exec` pode ler licoes existentes, mas nao as cria nem as atualiza.
 
 - Licoes positivas apos cada iteracao mantida
 - Licoes estrategicas apos cada decisao PIVOT
@@ -578,7 +578,7 @@ codex-autoresearch/
 
 **Quantas iteracoes?** Depende da tarefa. 5 para correcoes direcionadas, 10-20 para exploracao, ilimitadas para execucoes noturnas.
 
-**Ele aprende entre execucoes?** Sim. As licoes sao extraidas apos cada execucao e consultadas no inicio da proxima. O arquivo de licoes persiste entre sessoes.
+**Ele aprende entre execucoes?** Sim. As licoes sao extraidas apos cada execucao iterativa, exceto `exec`, e consultadas no inicio da proxima. O arquivo de licoes persiste entre sessoes; `exec` apenas le as licoes existentes.
 
 **Pode retomar apos uma interrupcao?** Sim. Na proxima invocacao, detecta a execucao anterior e retoma do ultimo estado consistente.
 
