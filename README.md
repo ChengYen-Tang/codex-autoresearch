@@ -101,70 +101,72 @@ Karpathy's autoresearch proved that a simple loop -- modify, verify, keep or dis
 
 ## Architecture
 
+The skill operates in two strict phases. Everything before "go" can ask the user. Everything after "go" is fully autonomous.
+
 ```
-              +---------------------+
-              |  Environment Probe  |  <-- Phase 0: detect CPU/GPU/RAM/toolchains
-              +---------+-----------+
-                        |
-              +---------v-----------+
-              |  Session Resume?    |  <-- check for prior run artifacts
-              +---------+-----------+
-                        |
-              +---------v-----------+
-              |   Read Context      |  <-- read scope + lessons file
-              +---------+-----------+
-                        |
-              +---------v-----------+
-              | Establish Baseline  |  <-- iteration #0
-              +---------+-----------+
-                        |
-         +--------------v--------------+
-         |                             |
-         |  +----------------------+   |
-         |  | Choose Hypothesis    |   |  <-- consult lessons + perspectives
-         |  | (or N for parallel)  |   |      filter by environment
-         |  +---------+------------+   |
-         |            |                |
-         |  +---------v------------+   |
-         |  | Make ONE Change      |   |
-         |  +---------+------------+   |
-         |            |                |
-         |  +---------v------------+   |
-         |  | git commit           |   |
-         |  +---------+------------+   |
-         |            |                |
-         |  +---------v------------+   |
-         |  | Run Verify + Guard   |   |
-         |  +---------+------------+   |
-         |            |                |
-         |        improved?            |
-         |       /         \           |
-         |     yes          no         |
-         |     /              \        |
-         |  +-v------+   +----v-----+ |
-         |  |  KEEP  |   | REVERT   | |
-         |  |+lesson |   +----+-----+ |
-         |  +--+-----+        |       |
-         |      \            /         |
-         |   +--v----------v---+      |
-         |   |   Log Result    |      |
-         |   +--------+--------+      |
-         |            |               |
-         |   +--------v--------+      |
-         |   |  Health Check   |      |  <-- disk, git, verify health
-         |   +--------+--------+      |
-         |            |               |
-         |     3+ discards?           |
-         |    /             \         |
-         |  no              yes       |
-         |  |          +----v-----+   |
-         |  |          | REFINE / |   |  <-- pivot-protocol escalation
-         |  |          | PIVOT    |   |
-         |  |          +----+-----+   |
-         |  |               |         |
-         +--+------+--------+         |
-         |         (repeat)           |
-         +----------------------------+
+========================= PHASE 1: SETUP (interactive) =========================
+
+  User: "I want to improve X"
+              |
+     +--------v---------+
+     |   Scan Repo       |  environment probe, read codebase
+     +--------+----------+
+              |
+     +--------v-----------+
+     |  Clarify with User  |  at least 1 round of questions
+     +--------+------------+
+              |
+     +--------v-----------+
+     |  Define Metric      |  mechanical, verifiable, a command produces a number
+     +--------+------------+
+              |
+     +--------v-----------+
+     |  User says "go"     |
+     +--------+------------+
+              |
+========================= PHASE 2: EXECUTION (autonomous) =====================
+              |
+     +--------v-----------+
+     |  Establish Baseline |  run verify, record iteration #0
+     +--------+------------+
+              |
+     +--------v-------------------------------------------+
+     |                                                    |
+     |   +--------------------+                           |
+     |   | Choose Hypothesis  |  consult lessons,         |
+     |   +--------+-----------+  filter by environment    |
+     |            |                                       |
+     |   +--------v-----------+                           |
+     |   | Make ONE Change    |  within scope only        |
+     |   +--------+-----------+                           |
+     |            |                                       |
+     |   +--------v-----------+                           |
+     |   | git commit         |  before verification      |
+     |   +--------+-----------+                           |
+     |            |                                       |
+     |   +--------v-----------+                           |
+     |   | Verify + Guard     |  mechanical only          |
+     |   +--------+-----------+                           |
+     |            |                                       |
+     |        improved?                                   |
+     |       /         \                                  |
+     |     yes          no                                |
+     |     /              \                               |
+     |  +-v------+   +----v------+                        |
+     |  |  KEEP  |   |  REVERT   |                        |
+     |  +--+-----+   +----+------+                        |
+     |      \            /                                |
+     |    +--v----------v--+                              |
+     |    |   Log Result   |                              |
+     |    +-------+--------+                              |
+     |            |                                       |
+     |          repeat                                    |
+     |    (never stop, never ask)                         |
+     |                                                    |
+     +----------------------------------------------------+
+
+  Stuck? -> REFINE (3 discards) -> PIVOT (5) -> Web Search -> Soft Blocker
+  Interrupted? -> Next run resumes from last consistent state
 ```
 
 The loop runs until interrupted (unbounded) or for exactly N iterations (bounded via `Iterations: N`).
@@ -172,21 +174,24 @@ The loop runs until interrupted (unbounded) or for exactly N iterations (bounded
 **In pseudocode:**
 
 ```
-PHASE 0: Probe environment, check for session resume
-PHASE 1: Read context + lessons file
+SETUP (interactive):
+  1. Scan repo + probe environment
+  2. Ask clarifying questions (at least 1 round)
+  3. Define mechanical metric + verify command
+  4. User says "go"
 
-LOOP (forever or N times):
-  1. Review current state + git history + results log + lessons
-  2. Pick ONE hypothesis (apply perspectives, filter by environment)
-     -- or N hypotheses if parallel mode is active
-  3. Make ONE atomic change
-  4. git commit (before verification)
-  5. Run mechanical verification + guard
-  6. Improved -> keep (extract lesson). Worse -> git reset. Crashed -> fix or skip.
-  7. Log the result
-  8. Health check (disk, git, verify health)
-  9. If 3+ discards -> REFINE; 5+ -> PIVOT; 2 PIVOTs -> web search
-  10. Repeat. Never stop. Never ask.
+EXECUTION (autonomous -- never ask, never stop):
+  5. Establish baseline (iteration #0)
+  LOOP (forever or N times):
+    6. Review state + results log + lessons
+    7. Pick ONE hypothesis
+    8. Make ONE atomic change
+    9. git commit
+    10. Run verify (+ guard if set)
+    11. Improved? -> keep. Worse? -> git reset.
+    12. Log result
+    13. If stuck: REFINE -> PIVOT -> web search -> soft blocker
+    14. Repeat.
 ```
 
 ---
