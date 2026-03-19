@@ -30,8 +30,8 @@
   <a href="#quick-start">Quick Start</a> ·
   <a href="#what-it-does">What It Does</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#modes">Modes</a> ·
-  <a href="#configuration">Configuration</a> ·
+  <a href="#how-it-works">How It Works</a> ·
+  <a href="#what-codex-figures-out">What Codex Figures Out</a> ·
   <a href="#cross-run-learning">Learning</a> ·
   <a href="#parallel-experiments">Parallel</a> ·
   <a href="docs/GUIDE.md">Guide</a> ·
@@ -101,72 +101,70 @@ Karpathy's autoresearch proved that a simple loop -- modify, verify, keep or dis
 
 ## Architecture
 
-The skill operates in two strict phases. Everything before "go" can ask the user. Everything after "go" is fully autonomous.
-
 ```
-========================= PHASE 1: SETUP (interactive) =========================
-
-  User: "I want to improve X"
-              |
-     +--------v---------+
-     |   Scan Repo       |  environment probe, read codebase
-     +--------+----------+
-              |
-     +--------v-----------+
-     |  Clarify with User  |  at least 1 round of questions
-     +--------+------------+
-              |
-     +--------v-----------+
-     |  Define Metric      |  mechanical, verifiable, a command produces a number
-     +--------+------------+
-              |
-     +--------v-----------+
-     |  User says "go"     |
-     +--------+------------+
-              |
-========================= PHASE 2: EXECUTION (autonomous) =====================
-              |
-     +--------v-----------+
-     |  Establish Baseline |  run verify, record iteration #0
-     +--------+------------+
-              |
-     +--------v-------------------------------------------+
-     |                                                    |
-     |   +--------------------+                           |
-     |   | Choose Hypothesis  |  consult lessons,         |
-     |   +--------+-----------+  filter by environment    |
-     |            |                                       |
-     |   +--------v-----------+                           |
-     |   | Make ONE Change    |  within scope only        |
-     |   +--------+-----------+                           |
-     |            |                                       |
-     |   +--------v-----------+                           |
-     |   | git commit         |  before verification      |
-     |   +--------+-----------+                           |
-     |            |                                       |
-     |   +--------v-----------+                           |
-     |   | Verify + Guard     |  mechanical only          |
-     |   +--------+-----------+                           |
-     |            |                                       |
-     |        improved?                                   |
-     |       /         \                                  |
-     |     yes          no                                |
-     |     /              \                               |
-     |  +-v------+   +----v------+                        |
-     |  |  KEEP  |   |  REVERT   |                        |
-     |  +--+-----+   +----+------+                        |
-     |      \            /                                |
-     |    +--v----------v--+                              |
-     |    |   Log Result   |                              |
-     |    +-------+--------+                              |
-     |            |                                       |
-     |          repeat                                    |
-     |    (never stop, never ask)                         |
-     |                                                    |
-     +----------------------------------------------------+
-
-  Stuck? -> REFINE (3 discards) -> PIVOT (5) -> Web Search -> Soft Blocker
-  Interrupted? -> Next run resumes from last consistent state
+              +---------------------+
+              |  Environment Probe  |  <-- Phase 0: detect CPU/GPU/RAM/toolchains
+              +---------+-----------+
+                        |
+              +---------v-----------+
+              |  Session Resume?    |  <-- check for prior run artifacts
+              +---------+-----------+
+                        |
+              +---------v-----------+
+              |   Read Context      |  <-- read scope + lessons file
+              +---------+-----------+
+                        |
+              +---------v-----------+
+              | Establish Baseline  |  <-- iteration #0
+              +---------+-----------+
+                        |
+         +--------------v--------------+
+         |                             |
+         |  +----------------------+   |
+         |  | Choose Hypothesis    |   |  <-- consult lessons + perspectives
+         |  | (or N for parallel)  |   |      filter by environment
+         |  +---------+------------+   |
+         |            |                |
+         |  +---------v------------+   |
+         |  | Make ONE Change      |   |
+         |  +---------+------------+   |
+         |            |                |
+         |  +---------v------------+   |
+         |  | git commit           |   |
+         |  +---------+------------+   |
+         |            |                |
+         |  +---------v------------+   |
+         |  | Run Verify + Guard   |   |
+         |  +---------+------------+   |
+         |            |                |
+         |        improved?            |
+         |       /         \           |
+         |     yes          no         |
+         |     /              \        |
+         |  +-v------+   +----v-----+ |
+         |  |  KEEP  |   | REVERT   | |
+         |  |+lesson |   +----+-----+ |
+         |  +--+-----+        |       |
+         |      \            /         |
+         |   +--v----------v---+      |
+         |   |   Log Result    |      |
+         |   +--------+--------+      |
+         |            |               |
+         |   +--------v--------+      |
+         |   |  Health Check   |      |  <-- disk, git, verify health
+         |   +--------+--------+      |
+         |            |               |
+         |     3+ discards?           |
+         |    /             \         |
+         |  no              yes       |
+         |  |          +----v-----+   |
+         |  |          | REFINE / |   |  <-- pivot-protocol escalation
+         |  |          | PIVOT    |   |
+         |  |          +----+-----+   |
+         |  |               |         |
+         +--+------+--------+         |
+         |         (repeat)           |
+         +----------------------------+
 ```
 
 The loop runs until interrupted (unbounded) or for exactly N iterations (bounded via `Iterations: N`).
@@ -174,76 +172,61 @@ The loop runs until interrupted (unbounded) or for exactly N iterations (bounded
 **In pseudocode:**
 
 ```
-SETUP (interactive):
-  1. Scan repo + probe environment
-  2. Ask clarifying questions (at least 1 round)
-  3. Define mechanical metric + verify command
-  4. User says "go"
+PHASE 0: Probe environment, check for session resume
+PHASE 1: Read context + lessons file
 
-EXECUTION (autonomous -- never ask, never stop):
-  5. Establish baseline (iteration #0)
-  LOOP (forever or N times):
-    6. Review state + results log + lessons
-    7. Pick ONE hypothesis
-    8. Make ONE atomic change
-    9. git commit
-    10. Run verify (+ guard if set)
-    11. Improved? -> keep. Worse? -> git reset.
-    12. Log result
-    13. If stuck: REFINE -> PIVOT -> web search -> soft blocker
-    14. Repeat.
+LOOP (forever or N times):
+  1. Review current state + git history + results log + lessons
+  2. Pick ONE hypothesis (apply perspectives, filter by environment)
+     -- or N hypotheses if parallel mode is active
+  3. Make ONE atomic change
+  4. git commit (before verification)
+  5. Run mechanical verification + guard
+  6. Improved -> keep (extract lesson). Worse -> git reset. Crashed -> fix or skip.
+  7. Log the result
+  8. Health check (disk, git, verify health)
+  9. If 3+ discards -> REFINE; 5+ -> PIVOT; 2 PIVOTs -> web search
+  10. Repeat. Never stop. Never ask.
 ```
 
 ---
 
-## Modes
+## How It Works
 
-Seven modes, one invocation pattern: `$codex-autoresearch` followed by a sentence describing what you want. Codex auto-detects the mode and guides you through a short conversation to fill in the details.
+You say what you want in one sentence. Codex does the rest.
 
-| Mode | When to use | Stops when |
-|------|-------------|------------|
-| `loop` | You have a measurable target to optimize | Interrupted or N iterations |
-| `plan` | You have a goal but not the config | Config block is generated |
-| `debug` | You need root-cause analysis with evidence | All hypotheses tested or N iterations |
-| `fix` | Something is broken and needs repair | Error count reaches zero |
-| `security` | You need a structured vulnerability audit | All attack surfaces covered or N iterations |
-| `ship` | You need gated release verification | All checklist items pass |
-| `exec` | CI/CD pipeline, no human available | N iterations (always bounded), JSON output |
+It scans your repo, proposes a plan, confirms with you, then iterates autonomously:
 
-**Mode selection shortcut:**
+| You say | What happens |
+|---------|-------------|
+| "Improve my test coverage" | Scans repo, proposes metric, iterates until target or interrupted |
+| "Fix the 12 failing tests" | Detects failures, repairs one by one until zero remain |
+| "Why is the API returning 503?" | Hunts root cause with falsifiable hypotheses and evidence |
+| "Is this code secure?" | Runs STRIDE + OWASP audit, every finding backed by code evidence |
+| "Ship it" | Verifies readiness, generates checklist, gates release |
+| "I want to optimize but don't know what to measure" | Analyzes repo, suggests metrics, generates launch-ready config |
 
-```
-"I want to improve X"           -->  loop  (or plan if unsure about metric)
-"Something is broken"           -->  fix   (or debug if cause is unknown)
-"Is this code secure?"          -->  security
-"Ship it"                       -->  ship
-codex exec --skill ...          -->  exec  (CI/CD, no wizard)
-```
+Behind the scenes, Codex maps your sentence to one of 7 specialized modes
+(loop, plan, debug, fix, security, ship, exec). You never need to pick a mode --
+just describe your goal.
 
 ---
 
-## Configuration
+## What Codex Figures Out
 
-### Required fields (for `loop` mode)
+Codex infers everything from your sentence and your repo. You never write config.
 
-| Field | Type | Example |
-|-------|------|---------|
-| `Goal` | What to achieve | `Reduce type errors to zero` |
-| `Scope` | File globs to modify | `src/**/*.ts` |
-| `Metric` | What number to track | `type error count` |
-| `Direction` | `higher` or `lower` | `lower` |
-| `Verify` | Shell command producing the metric | `tsc --noEmit 2>&1 \| wc -l` |
+| What it needs | How it gets it | Example |
+|--------------|----------------|---------|
+| Goal | Your sentence | "get rid of all any types" |
+| Scope | Scans repo structure | auto-discovers src/**/*.ts |
+| Metric | Proposes based on goal + tooling | any count (current: 47) |
+| Direction | Infers from "improve" / "reduce" / "eliminate" | lower |
+| Verify command | Matches to repo tooling | grep count + tsc --noEmit |
+| Guard (optional) | Suggests if regression risk exists | npm test |
 
-### Optional fields
-
-| Field | Default | Purpose |
-|-------|---------|---------|
-| `Guard` | none | Safety command that must always pass (regression prevention) |
-| `Iterations` | unlimited | Cap at N iterations |
-| `Run tag` | auto | Label for this run |
-| `Stop condition` | none | Custom early-stop rule |
-
-Missing required fields trigger an interactive wizard that scans your repo and always confirms with you before starting (up to 5 rounds). You never need to know the field names.
+Before starting, Codex always shows you what it found and asks you to confirm.
+One round of confirmation minimum, up to five if needed. Then you say "go" and walk away.
 
 ### Dual-gate verification
 
@@ -258,20 +241,6 @@ Guard: npx tsc --noEmit                                                         
 ```
 
 If verify passes but guard fails, the change is reworked (up to 2 attempts). Guard files are never modified.
-
----
-
-## Quick Decision Guide
-
-| You want to... | Mode | Key config |
-|----------------|------|------------|
-| Push a number in one direction overnight | `loop` | Goal + Metric + Verify |
-| Figure out which metric to track | `plan` | Just a Goal |
-| Find why something is broken | `debug` | Scope + Symptom |
-| Make failing tests/types/lint pass | `fix` | Target command |
-| Audit code for vulnerabilities | `security` | Scope + Focus |
-| Release with confidence | `ship` | Say "ship it" or "dry run first" |
-| Run in CI/CD without interaction | `exec` | All fields upfront + Iterations |
 
 ---
 

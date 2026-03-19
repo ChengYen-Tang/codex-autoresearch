@@ -30,8 +30,8 @@
   <a href="#inicio-rapido">Inicio rapido</a> ·
   <a href="#o-que-faz">O que faz</a> ·
   <a href="#arquitetura">Arquitetura</a> ·
-  <a href="#modos">Modos</a> ·
-  <a href="#configuracao">Configuracao</a> ·
+  <a href="#como-funciona">Modos</a> ·
+  <a href="#o-que-o-codex-descobre-automaticamente">Configuracao</a> ·
   <a href="#aprendizado-entre-execucoes">Aprendizado</a> ·
   <a href="#experimentos-paralelos">Paralelo</a> ·
   <a href="../GUIDE.md">Guia de operacao</a> ·
@@ -103,30 +103,30 @@ O autoresearch do Karpathy provou que um loop simples -- modificar, verificar, m
 
 ```
               +---------------------+
-              |  Environment Probe  |  <-- Phase 0: detect CPU/GPU/RAM/toolchains
+              | Sondagem de ambiente|  <-- Phase 0: detectar CPU/GPU/RAM/toolchains
               +---------+-----------+
                         |
               +---------v-----------+
-              |  Session Resume?    |  <-- check for prior run artifacts
+              |  Retomar sessao?    |  <-- verificar artefatos de execucao anterior
               +---------+-----------+
                         |
               +---------v-----------+
-              |   Read Context      |  <-- read scope + lessons file
+              |   Ler contexto      |  <-- ler escopo + arquivo de licoes
               +---------+-----------+
                         |
               +---------v-----------+
-              | Establish Baseline  |  <-- iteration #0
+              |Estabelecer linha base| <-- iteration #0
               +---------+-----------+
                         |
          +--------------v--------------+
          |                             |
          |  +----------------------+   |
-         |  | Choose Hypothesis    |   |  <-- consult lessons + perspectives
-         |  | (or N for parallel)  |   |      filter by environment
+         |  | Escolher hipotese    |   |  <-- consultar licoes + perspectivas
+         |  | (ou N em paralelo)   |   |      filtrar por ambiente
          |  +---------+------------+   |
          |            |                |
          |  +---------v------------+   |
-         |  | Make ONE Change      |   |
+         |  | Fazer UMA alteracao  |   |
          |  +---------+------------+   |
          |            |                |
          |  +---------v------------+   |
@@ -137,7 +137,7 @@ O autoresearch do Karpathy provou que um loop simples -- modificar, verificar, m
          |  | Run Verify + Guard   |   |
          |  +---------+------------+   |
          |            |                |
-         |        improved?            |
+         |        melhorou?            |
          |       /         \           |
          |     yes          no         |
          |     /              \        |
@@ -147,23 +147,23 @@ O autoresearch do Karpathy provou que um loop simples -- modificar, verificar, m
          |  +--+-----+        |       |
          |      \            /         |
          |   +--v----------v---+      |
-         |   |   Log Result    |      |
+         |   | Registrar resultado|   |
          |   +--------+--------+      |
          |            |               |
          |   +--------v--------+      |
-         |   |  Health Check   |      |  <-- disk, git, verify health
+         |   |Verificacao de saude|   |  <-- disco, git, saude da verificacao
          |   +--------+--------+      |
          |            |               |
-         |     3+ discards?           |
+         |     3+ descartes?          |
          |    /             \         |
          |  no              yes       |
          |  |          +----v-----+   |
-         |  |          | REFINE / |   |  <-- pivot-protocol escalation
+         |  |          | REFINE / |   |  <-- escalonamento do protocolo pivot
          |  |          | PIVOT    |   |
          |  |          +----+-----+   |
          |  |               |         |
          +--+------+--------+         |
-         |         (repeat)           |
+         |         (repetir)          |
          +----------------------------+
 ```
 
@@ -191,54 +191,42 @@ LOOP (para sempre ou N vezes):
 
 ---
 
-## Modos
+## Como funciona
 
-Sete modos, um unico padrao de invocacao: `$codex-autoresearch` seguido de uma frase descrevendo o que voce quer. O Codex detecta automaticamente o modo e guia voce atraves de uma breve conversa para completar a configuracao.
+Voce diz o que quer em uma frase. O Codex faz o resto.
 
-| Modo | Quando usar | Para quando |
-|------|-------------|-------------|
-| `loop` | Voce tem um objetivo mensuravel para otimizar | Interrupcao ou N iteracoes |
-| `plan` | Voce tem um objetivo mas nao a configuracao | Bloco de configuracao gerado |
-| `debug` | Voce precisa de analise de causa raiz com evidencia | Todas as hipoteses testadas ou N iteracoes |
-| `fix` | Algo esta quebrado e precisa de reparo | Contagem de erros chega a zero |
-| `security` | Voce precisa de uma auditoria estruturada de vulnerabilidades | Todas as superficies de ataque cobertas ou N iteracoes |
-| `ship` | Voce precisa de verificacao de lancamento com portoes | Todos os itens da lista aprovados |
-| `exec` | Pipeline CI/CD, sem humano disponivel | N iteracoes (sempre limitado), saida JSON |
+Ele escaneia seu repositorio, propoe um plano, confirma com voce e depois itera de forma autonoma:
 
-**Selecao rapida:**
+| Voce diz | O que acontece |
+|---------|---------------|
+| "Melhorar minha cobertura de testes" | Escaneia o repo, propoe metrica, itera ate o objetivo ou interrupcao |
+| "Corrigir os 12 testes que falham" | Detecta falhas, repara um a um ate zero restantes |
+| "Por que a API retorna 503?" | Rastreia a causa raiz com hipoteses falsificaveis e evidencia |
+| "Esse codigo e seguro?" | Executa auditoria STRIDE + OWASP, cada achado respaldado por codigo |
+| "Lancar" | Verifica preparacao, gera checklist, lancamento com portoes |
+| "Quero otimizar mas nao sei o que medir" | Analisa o repo, sugere metricas, gera configuracao pronta para uso |
 
-```
-"Quero melhorar X"              -->  loop (ou plan se nao tem certeza da metrica)
-"Algo esta quebrado"            -->  fix  (ou debug se a causa e desconhecida)
-"Esse codigo e seguro?"         -->  security
-"Pronto para lancar"            -->  ship
-codex exec --skill ...          -->  exec (CI/CD, sem assistente)
-```
+Nos bastidores, o Codex mapeia sua frase para um dos 7 modos especializados
+(loop, plan, debug, fix, security, ship, exec). Voce nunca precisa escolher um modo --
+apenas descreva seu objetivo.
 
 ---
 
-## Configuracao
+## O que o Codex descobre automaticamente
 
-### Campos obrigatorios (modo `loop`)
+O Codex infere tudo a partir da sua frase e do seu repositorio. Voce nunca escreve configuracao.
 
-| Campo | Tipo | Exemplo |
-|-------|------|---------|
-| `Goal` | Objetivo a alcancar | `Reduce type errors to zero` |
-| `Scope` | Globs de arquivos a modificar | `src/**/*.ts` |
-| `Metric` | Numero a rastrear | `type error count` |
-| `Direction` | `higher` ou `lower` | `lower` |
-| `Verify` | Comando que produz a metrica | `tsc --noEmit 2>&1 \| wc -l` |
+| O que precisa | Como obtem | Exemplo |
+|--------------|-----------|---------|
+| Objetivo | Sua frase | "eliminar todos os tipos any" |
+| Escopo | Escaneia a estrutura do repo | descobre automaticamente src/**/*.ts |
+| Metrica | Propoe com base no objetivo + ferramentas | contagem de any (atual: 47) |
+| Direcao | Infere de "melhorar" / "reduzir" / "eliminar" | reduzir |
+| Comando de verificacao | Identifica ferramentas do repo | contagem grep + tsc --noEmit |
+| Guarda (opcional) | Sugere se existe risco de regressao | npm test |
 
-### Campos opcionais
-
-| Campo | Valor padrao | Proposito |
-|-------|--------------|-----------|
-| `Guard` | nenhum | Comando de seguranca que sempre deve passar (prevencao de regressoes) |
-| `Iterations` | ilimitado | Limitar a N iteracoes |
-| `Run tag` | automatico | Rotulo para esta execucao |
-| `Stop condition` | nenhum | Regra personalizada de parada antecipada |
-
-Quando faltam campos obrigatorios, um assistente interativo escaneia seu repositorio e sempre confirma com voce antes de iniciar (ate 5 rodadas). Voce nao precisa conhecer os nomes dos campos.
+Antes de comecar, o Codex sempre mostra o que encontrou e pede confirmacao.
+Minimo uma rodada de confirmacao, ate cinco se necessario. Depois voce diz "go" e pode ir embora.
 
 ### Verificacao de duplo portao
 
@@ -253,20 +241,6 @@ Guard: npx tsc --noEmit                                                         
 ```
 
 Se verify passa mas guard falha, a alteracao e reajustada (ate 2 tentativas) e depois revertida. Os arquivos de Guard nunca sao modificados.
-
----
-
-## Guia de decisao rapida
-
-| Voce quer... | Modo | Configuracao chave |
-|--------------|------|--------------------|
-| Empurrar um numero em uma direcao a noite toda | `loop` | Goal + Metric + Verify |
-| Descobrir qual metrica rastrear | `plan` | Apenas um Goal |
-| Encontrar por que algo esta quebrado | `debug` | Scope + Symptom |
-| Fazer tests/tipos/lint passarem | `fix` | Comando Target |
-| Auditar codigo em busca de vulnerabilidades | `security` | Scope + Focus |
-| Lancar com confianca | `ship` | Diga "lancar" ou "primeiro um ensaio" |
-| Executar em CI/CD sem interacao | `exec` | Todos os campos antecipados + Iterations |
 
 ---
 
