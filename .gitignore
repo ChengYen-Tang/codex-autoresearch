@@ -11,6 +11,7 @@ run.log
 autoresearch-lessons.md
 __pycache__/
 *.pyc
+.venv/
 debug/
 fix/
 security/

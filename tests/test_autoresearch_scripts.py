@@ -270,8 +270,21 @@ class AutoresearchScriptsTest(unittest.TestCase):
             self.assertTrue(resume["repaired_state"])
 
             state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["config"], {"direction": "lower"})
             self.assertEqual(state["state"]["iteration"], 1)
             self.assertEqual(state["state"]["current_metric"], 8)
+
+            second_resume = self.run_script(
+                "autoresearch_resume_check.py",
+                "--results-path",
+                str(results_path),
+                "--state-path",
+                str(state_path),
+            )
+            self.assertEqual(second_resume["decision"], "mini_wizard")
+            self.assertTrue(
+                any("config is missing required resume fields" in reason for reason in second_resume["reasons"])
+            )
 
     def test_resume_check_detects_json_tsv_divergence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -639,6 +652,49 @@ class AutoresearchScriptsTest(unittest.TestCase):
             )
             self.assertEqual(resume["decision"], "full_resume")
             self.assertEqual(resume["state_path"], str(scratch_state_path))
+
+    def test_exec_init_run_clears_stale_default_scratch_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            (repo / ".git").mkdir()
+            scratch_state_path = Path(
+                self.run_script_text(
+                    "autoresearch_exec_state.py",
+                    "--repo-root",
+                    str(repo),
+                )
+            )
+            scratch_state_path.parent.mkdir(parents=True, exist_ok=True)
+            scratch_state_path.write_text('{"stale": true}\n', encoding="utf-8")
+
+            result = self.run_script(
+                "autoresearch_init_run.py",
+                "--mode",
+                "exec",
+                "--goal",
+                "Reduce failures",
+                "--scope",
+                "src/**/*.py",
+                "--metric-name",
+                "failure count",
+                "--direction",
+                "lower",
+                "--verify",
+                "pytest -q",
+                "--baseline-metric",
+                "10",
+                "--baseline-commit",
+                "a1b2c3d",
+                "--baseline-description",
+                "baseline failures",
+                cwd=repo,
+            )
+
+            self.assertEqual(result["state_path"], str(scratch_state_path))
+            state = json.loads(scratch_state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["mode"], "exec")
+            self.assertEqual(state["config"]["goal"], "Reduce failures")
+            self.assertFalse(state.get("stale", False))
 
     def test_record_iteration_does_not_use_exec_scratch_for_loop_log(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

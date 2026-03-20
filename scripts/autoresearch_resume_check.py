@@ -18,6 +18,25 @@ from autoresearch_helpers import (
 )
 
 
+REQUIRED_RESUME_CONFIG_FIELDS = ("goal", "scope", "metric", "direction", "verify")
+
+
+def missing_resume_config_fields(config: object) -> list[str]:
+    if not isinstance(config, dict):
+        return list(REQUIRED_RESUME_CONFIG_FIELDS)
+
+    missing: list[str] = []
+    for field_name in ("goal", "scope", "metric", "verify"):
+        value = config.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            missing.append(field_name)
+
+    direction = config.get("direction")
+    if direction not in {"lower", "higher"}:
+        missing.append("direction")
+    return missing
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Check whether a prior run can resume from JSON state, TSV state, or needs a fresh start."
@@ -67,8 +86,19 @@ def main() -> int:
     if state_exists:
         try:
             state_payload = read_state_payload(state_path)
-            json_direction = state_payload.get("config", {}).get("direction")
-            if reconstructed is not None and json_direction not in {direction, None}:
+            config = state_payload.get("config", {})
+            missing_config_fields = missing_resume_config_fields(config)
+            if missing_config_fields:
+                state_error = (
+                    "config is missing required resume fields: "
+                    + ", ".join(missing_config_fields)
+                )
+            json_direction = config.get("direction")
+            if (
+                state_error is None
+                and reconstructed is not None
+                and json_direction not in {direction, None}
+            ):
                 state_error = (
                     f"config.direction mismatch between state ({json_direction}) and TSV ({direction})"
                 )
@@ -98,6 +128,8 @@ def main() -> int:
                 reasons.append("No JSON state file; TSV reconstruction is available.")
     elif state_payload is not None:
         decision = "mini_wizard"
+        if state_error is not None:
+            reasons.append(f"JSON state needs confirmation: {state_error}")
         if tsv_error is not None:
             reasons.append(f"JSON state exists but TSV is unavailable: {tsv_error}")
         elif not results_exists:
@@ -119,17 +151,7 @@ def main() -> int:
         repaired_payload = build_state_payload(
             mode=source_payload.get("mode", "loop"),
             run_tag=source_payload.get("run_tag") or parsed.metadata.get("run_tag"),
-            config=source_payload.get(
-                "config",
-                {
-                    "goal": "",
-                    "scope": "",
-                    "metric": "",
-                    "direction": direction,
-                    "verify": "",
-                    "guard": None,
-                },
-            ),
+            config=source_payload.get("config", {"direction": direction}),
             summary=reconstructed,
         )
         write_json_atomic(state_path, repaired_payload)

@@ -8,6 +8,7 @@ from pathlib import Path
 from autoresearch_helpers import (
     AutoresearchError,
     build_state_payload,
+    cleanup_exec_state,
     decimal_to_json_number,
     format_decimal,
     make_row,
@@ -54,6 +55,13 @@ def main() -> int:
 
     results_path = Path(args.results_path)
     state_path = resolve_state_path(args.state_path, mode=args.mode)
+
+    # Exec mode is documented to start fresh. If the default scratch state was
+    # left behind by a previous crashed run, clear it before checking for
+    # existing artifacts so the next unattended run can start cleanly.
+    if args.mode == "exec" and args.state_path is None and not args.force:
+        if state_path.exists():
+            cleanup_exec_state()
 
     if not args.force:
         for path in (results_path, state_path):
