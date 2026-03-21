@@ -3924,6 +3924,29 @@ class AutoresearchScriptsTest(unittest.TestCase):
             self.assertEqual(result["decision"], "ok")
             self.assertFalse(any("unexpected worktree changes" in warning for warning in result["warnings"]))
 
+    def test_health_check_uses_results_repo_when_repo_flag_is_omitted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            repo = base / "target"
+            repo.mkdir()
+            subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+            (repo / "notes.txt").write_text("surprise\n", encoding="utf-8")
+
+            result = self.run_script(
+                "autoresearch_health_check.py",
+                "--results-path",
+                str(repo / "research-results.tsv"),
+                "--state-path",
+                str(repo / "autoresearch-state.json"),
+                "--verify-cmd",
+                "python3 -c pass",
+                "--min-free-mb",
+                "1",
+                cwd=base,
+            )
+            self.assertEqual(result["decision"], "warn")
+            self.assertTrue(any("notes.txt" in warning for warning in result["warnings"]))
+
     def test_health_check_blocks_when_verify_command_is_missing_from_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -3948,6 +3971,26 @@ class AutoresearchScriptsTest(unittest.TestCase):
             self.assertTrue(
                 any("verify command is not executable" in blocker for blocker in result["blockers"])
             )
+
+    def test_health_check_accepts_verify_command_with_env_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            result = self.run_script(
+                "autoresearch_health_check.py",
+                "--repo",
+                str(repo),
+                "--results-path",
+                str(repo / "research-results.tsv"),
+                "--state-path",
+                str(repo / "autoresearch-state.json"),
+                "--verify-cmd",
+                f"FOO=1 {sys.executable} -V",
+                "--min-free-mb",
+                "1",
+            )
+            self.assertEqual(result["decision"], "ok")
+            self.assertEqual(result["blockers"], [])
 
     def test_health_check_finds_repo_state_without_explicit_state_path_outside_repo_cwd(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

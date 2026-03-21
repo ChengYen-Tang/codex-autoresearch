@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 from pathlib import Path
@@ -17,8 +18,12 @@ from autoresearch_helpers import (
     lexical_abspath,
     parse_scope_patterns,
     path_is_in_scope,
+    results_repo_root,
 )
 from autoresearch_resume_check import evaluate_resume_state
+
+
+ENV_ASSIGNMENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 
 
 def verify_command_exists(command: str) -> bool:
@@ -30,7 +35,14 @@ def verify_command_exists(command: str) -> bool:
         return False
     if not parts:
         return False
-    executable = parts[0]
+    executable = ""
+    for part in parts:
+        if ENV_ASSIGNMENT_RE.fullmatch(part):
+            continue
+        executable = part
+        break
+    if not executable:
+        return False
 
     candidate = Path(executable)
     if candidate.is_absolute() or "/" in executable or "\\" in executable:
@@ -118,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run the executable health checks for an autoresearch repo."
     )
-    parser.add_argument("--repo", default=".")
+    parser.add_argument("--repo")
     parser.add_argument("--results-path", default="research-results.tsv")
     parser.add_argument("--state-path")
     parser.add_argument("--verify-cmd", required=True)
@@ -130,8 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    repo = lexical_abspath(Path(args.repo))
     results_path = Path(args.results_path)
+    repo = (
+        lexical_abspath(Path(args.repo))
+        if args.repo is not None
+        else results_repo_root(
+            lexical_abspath(results_path) if results_path.is_absolute() else results_path
+        )
+    )
     if not results_path.is_absolute():
         results_path = repo / results_path
     output = run_health_check(
