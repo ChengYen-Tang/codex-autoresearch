@@ -63,6 +63,7 @@ def evaluate_repo_preflight(
             results_path=results_path,
             state_path_arg=state_path_arg,
             verify_command=verify_command,
+            scope_text=scope_text,
             min_free_mb=min_free_mb,
         )
         if include_health

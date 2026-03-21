@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 from pathlib import Path
-from pathlib import PurePosixPath
 from typing import Any
 
 from autoresearch_helpers import (
     AutoresearchError,
     git_status_paths,
     is_autoresearch_owned_artifact,
+    parse_scope_patterns,
+    path_is_in_scope,
 )
 
 
@@ -26,35 +26,6 @@ def git_lines(repo: Path, *args: str) -> list[str]:
     if completed.returncode != 0:
         raise AutoresearchError(completed.stderr.strip() or f"git {' '.join(args)} failed")
     return [line.rstrip() for line in completed.stdout.splitlines() if line.strip()]
-
-
-def parse_scope_patterns(scope_text: str | None) -> list[str]:
-    if not scope_text:
-        return []
-    return [token for token in re.split(r"[\s,]+", scope_text.strip()) if token]
-
-
-def path_is_in_scope(path: str, patterns: list[str]) -> bool:
-    if not patterns:
-        return False
-    normalized = path.replace("\\", "/")
-    candidate = PurePosixPath(normalized)
-    for pattern in patterns:
-        pattern = pattern.strip()
-        if not pattern:
-            continue
-        variants = {pattern.replace("\\", "/").lstrip("./")}
-        while True:
-            expanded = {variant.replace("**/", "") for variant in variants if "**/" in variant}
-            expanded -= variants
-            if not expanded:
-                break
-            variants |= expanded
-        if any(candidate.match(variant) for variant in variants):
-            return True
-    return False
-
-
 def evaluate_commit_gate(
     *,
     repo: Path,

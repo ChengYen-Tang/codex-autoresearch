@@ -14,6 +14,8 @@ from autoresearch_helpers import (
     has_git_repo,
     is_autoresearch_owned_artifact,
     lexical_abspath,
+    parse_scope_patterns,
+    path_is_in_scope,
 )
 from autoresearch_resume_check import evaluate_resume_state
 
@@ -39,6 +41,7 @@ def run_health_check(
     results_path: Path,
     state_path_arg: str | None,
     verify_command: str,
+    scope_text: str | None,
     min_free_mb: int,
 ) -> dict[str, Any]:
     warnings: list[str] = []
@@ -72,9 +75,10 @@ def run_health_check(
 
     if has_git_repo(repo):
         dirty_lines = git_status_paths(repo)
+        scope_patterns = parse_scope_patterns(scope_text)
         unexpected = []
         for path in dirty_lines:
-            if not is_autoresearch_owned_artifact(path):
+            if not is_autoresearch_owned_artifact(path) and not path_is_in_scope(path, scope_patterns):
                 unexpected.append(path)
         if unexpected:
             warnings.append("unexpected worktree changes: " + ", ".join(sorted(unexpected)))
@@ -115,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--results-path", default="research-results.tsv")
     parser.add_argument("--state-path")
     parser.add_argument("--verify-cmd", required=True)
+    parser.add_argument("--scope")
     parser.add_argument("--min-free-mb", type=int, default=500)
     return parser
 
@@ -131,6 +136,7 @@ def main() -> int:
         results_path=lexical_abspath(results_path),
         state_path_arg=args.state_path,
         verify_command=args.verify_cmd,
+        scope_text=args.scope,
         min_free_mb=args.min_free_mb,
     )
     print(json.dumps(output, indent=2, sort_keys=True))

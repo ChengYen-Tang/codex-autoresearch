@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 HEADER = [
@@ -214,6 +214,47 @@ def resolve_repo_managed_path(
     if not candidate.is_absolute():
         candidate = repo / candidate
     return lexical_abspath(candidate)
+
+
+def parse_scope_patterns(scope_text: str | None) -> list[str]:
+    if not scope_text:
+        return []
+    return [token for token in re.split(r"[\s,]+", scope_text.strip()) if token]
+
+
+def path_is_in_scope(path: str, patterns: list[str]) -> bool:
+    if not patterns:
+        return False
+
+    normalized = path.replace("\\", "/")
+    candidate = PurePosixPath(normalized)
+    for pattern in patterns:
+        pattern = pattern.strip()
+        if not pattern:
+            continue
+
+        normalized_pattern = pattern.replace("\\", "/").lstrip("./")
+        variants = {normalized_pattern}
+
+        if normalized_pattern.endswith("/") or not any(
+            marker in normalized_pattern for marker in "*?["
+        ):
+            base = normalized_pattern.rstrip("/")
+            if base:
+                variants.add(base)
+                variants.add(f"{base}/**")
+
+        while True:
+            expanded = {variant.replace("**/", "") for variant in variants if "**/" in variant}
+            expanded -= variants
+            if not expanded:
+                break
+            variants |= expanded
+
+        if any(candidate.match(variant) for variant in variants):
+            return True
+
+    return False
 
 
 def is_autoresearch_owned_artifact(path: str | Path) -> bool:
