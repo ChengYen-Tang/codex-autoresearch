@@ -249,23 +249,22 @@ def path_is_in_scope(path: str, patterns: list[str]) -> bool:
         return False
 
     normalized = path.replace("\\", "/")
-    candidate = PurePosixPath(normalized)
+    stripped_path = normalized.lstrip("./")
+    candidate = PurePosixPath(stripped_path)
     for pattern in patterns:
         pattern = pattern.strip()
         if not pattern:
             continue
 
         normalized_pattern = pattern.replace("\\", "/").lstrip("./")
+        is_glob = any(marker in normalized_pattern for marker in "*?[")
+        base = normalized_pattern.rstrip("/")
+
+        if normalized_pattern.endswith("/") or not is_glob:
+            if base and (stripped_path == base or stripped_path.startswith(f"{base}/")):
+                return True
+
         variants = {normalized_pattern}
-
-        if normalized_pattern.endswith("/") or not any(
-            marker in normalized_pattern for marker in "*?["
-        ):
-            base = normalized_pattern.rstrip("/")
-            if base:
-                variants.add(base)
-                variants.add(f"{base}/**")
-
         while True:
             expanded = {variant.replace("**/", "") for variant in variants if "**/" in variant}
             expanded -= variants

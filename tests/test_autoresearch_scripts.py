@@ -3672,6 +3672,26 @@ class AutoresearchScriptsTest(unittest.TestCase):
             self.assertEqual(result["decision"], "allow")
             self.assertEqual(result["unexpected_worktree"], [])
 
+    def test_commit_gate_treats_nested_directory_scope_as_in_scope_subtree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+            nested = repo / "src" / "pkg"
+            nested.mkdir(parents=True)
+            (nested / "a.py").write_text("print('ok')\n", encoding="utf-8")
+
+            result = self.run_script(
+                "autoresearch_commit_gate.py",
+                "--repo",
+                str(repo),
+                "--phase",
+                "prelaunch",
+                "--scope",
+                "src/",
+            )
+            self.assertEqual(result["decision"], "allow")
+            self.assertEqual(result["unexpected_worktree"], [])
+
     def test_commit_gate_blocks_rename_from_out_of_scope_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -3907,6 +3927,30 @@ class AutoresearchScriptsTest(unittest.TestCase):
             src = repo / "src"
             src.mkdir()
             (src / "foo.py").write_text("print('ok')\n", encoding="utf-8")
+
+            result = self.run_script(
+                "autoresearch_health_check.py",
+                "--repo",
+                str(repo),
+                "--results-path",
+                str(repo / "research-results.tsv"),
+                "--verify-cmd",
+                "python3 -c pass",
+                "--scope",
+                "src/",
+                "--min-free-mb",
+                "1",
+            )
+            self.assertEqual(result["decision"], "ok")
+            self.assertFalse(any("unexpected worktree changes" in warning for warning in result["warnings"]))
+
+    def test_health_check_ignores_nested_in_scope_directory_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+            nested = repo / "src" / "pkg"
+            nested.mkdir(parents=True)
+            (nested / "a.py").write_text("print('ok')\n", encoding="utf-8")
 
             result = self.run_script(
                 "autoresearch_health_check.py",
