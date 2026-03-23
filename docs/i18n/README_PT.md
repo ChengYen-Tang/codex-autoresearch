@@ -465,6 +465,8 @@ Codigos de saida: 0 = melhorou, 1 = sem melhoria, 2 = bloqueio duro.
 
 Antes de usar `codex exec` em CI, configure antecipadamente a autenticacao do CLI do Codex. Em ambientes de automacao controlados, prefira `codex exec --dangerously-bypass-approvals-and-sandbox ...` para que as execucoes `exec` independentes sigam a politica padrao `danger_full_access` do runtime gerenciado. Para execucoes programaticas, a autenticacao por API key e a opcao preferida.
 
+Quando `Mode: exec` roda pelos helper scripts empacotados com a skill, nao renomeie manualmente os artefatos antigos na raiz do repo. `autoresearch_init_run.py --mode exec ...` ja arquiva `research-results.tsv` e `autoresearch-state.json` com os nomes canonicos `research-results.prev.tsv` e `autoresearch-state.prev.json` antes de iniciar a nova execucao.
+
 Consulte `references/exec-workflow.md`.
 
 ---
@@ -503,6 +505,8 @@ Esses artefatos de estado sao mantidos pelos helper scripts empacotados com o sk
 - `python3 <skill-root>/scripts/autoresearch_decision.py`
 - `python3 <skill-root>/scripts/autoresearch_lessons.py`
 - `python3 <skill-root>/scripts/autoresearch_supervisor_status.py`
+
+Os helpers de control-plane orientados ao repo usam `--repo <repo>` por padrao. Para `autoresearch_resume_check.py`, `autoresearch_launch_gate.py`, `autoresearch_resume_prompt.py`, `autoresearch_supervisor_status.py`, `autoresearch_runtime_ctl.py status` e `autoresearch_runtime_ctl.py stop`, essa e a forma recomendada; `--results-path`, `--state-path`, `--launch-path` e `--runtime-path` continuam disponiveis como overrides avancados.
 
 Para usuarios humanos, agora existe apenas uma entrada principal: **`$codex-autoresearch`**.
 

@@ -478,6 +478,8 @@ security + fix               # 审计并修复一步到位
 
 在 CI 中使用 `codex exec` 前，请先配置好 Codex CLI 认证。在受控自动化环境里，建议优先使用 `codex exec --dangerously-bypass-approvals-and-sandbox ...`，这样独立 `exec` 运行会与托管 runtime 默认的 `danger_full_access` 策略保持一致。对于程序化运行，优先使用 API key 认证。
 
+如果 `Mode: exec` 由 skill 自带的 helper scripts 驱动，不要先手工重命名 repo 根目录中的旧工件。`autoresearch_init_run.py --mode exec ...` 会自动把默认的 `research-results.tsv` 和 `autoresearch-state.json` 归档为 `research-results.prev.tsv` 和 `autoresearch-state.prev.json`，然后再初始化新的执行。
+
 详见 `references/exec-workflow.md`。
 
 ---
@@ -516,6 +518,8 @@ iteration  commit   metric  delta   status    description
 - `python3 <skill-root>/scripts/autoresearch_decision.py`
 - `python3 <skill-root>/scripts/autoresearch_lessons.py`
 - `python3 <skill-root>/scripts/autoresearch_supervisor_status.py`
+
+以 repo 为锚点的 control-plane helper 默认优先使用 `--repo <repo>`。例如 `autoresearch_resume_check.py`、`autoresearch_launch_gate.py`、`autoresearch_resume_prompt.py`、`autoresearch_supervisor_status.py`、`autoresearch_runtime_ctl.py status`、`autoresearch_runtime_ctl.py stop` 都推荐先传 `--repo`；`--results-path`、`--state-path`、`--launch-path`、`--runtime-path` 仍然保留为高级 override。
 
 对人类用户来说，现在只保留一个主要入口：**`$codex-autoresearch`**。
 

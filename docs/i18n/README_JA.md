@@ -463,6 +463,8 @@ Codex がインタラクティブモードで以前中断された run を検出
 
 CI で `codex exec` を使う前に、Codex CLI の認証を事前に設定してください。制御された自動化環境では、単独の `exec` 実行も managed runtime の既定ポリシー `danger_full_access` に揃うよう、`codex exec --dangerously-bypass-approvals-and-sandbox ...` を優先してください。プログラム実行では API key 認証が推奨です。
 
+`Mode: exec` を skill 同梱の helper script で動かす場合、repo 直下の古い成果物を手動でリネームしないでください。`autoresearch_init_run.py --mode exec ...` が既定の `research-results.tsv` と `autoresearch-state.json` を `research-results.prev.tsv` と `autoresearch-state.prev.json` に自動で退避してから、新しい実行を初期化します。
+
 詳細は `references/exec-workflow.md` を参照。
 
 ---
@@ -501,6 +503,8 @@ iteration  commit   metric  delta   status    description
 - `python3 <skill-root>/scripts/autoresearch_decision.py`
 - `python3 <skill-root>/scripts/autoresearch_lessons.py`
 - `python3 <skill-root>/scripts/autoresearch_supervisor_status.py`
+
+repo を基準にする control-plane helper は、通常 `--repo <repo>` を優先して使います。`autoresearch_resume_check.py`、`autoresearch_launch_gate.py`、`autoresearch_resume_prompt.py`、`autoresearch_supervisor_status.py`、`autoresearch_runtime_ctl.py status`、`autoresearch_runtime_ctl.py stop` ではこの形が推奨です。`--results-path`、`--state-path`、`--launch-path`、`--runtime-path` は上級向け override として引き続き利用できます。
 
 人間向けの公開入口は、いまは **`$codex-autoresearch`** ひとつだけです。
 
