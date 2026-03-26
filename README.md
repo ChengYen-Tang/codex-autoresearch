@@ -149,7 +149,7 @@ Karpathy's autoresearch proved that a simple loop -- modify, verify, keep or dis
               +----------------------+
 ```
 
-Foreground and background share the same experiment protocol. The difference is only where the loop executes: the current Codex session for foreground, or the detached runtime controller for background. Both run until interrupted (unbounded) or for exactly N iterations (bounded via `Iterations: N`).
+Foreground and background share the same experiment protocol. The difference is only where the loop executes: the current Codex session for foreground, or the detached runtime controller for background. Unbounded runs continue until you interrupt them or another terminal condition is reached (goal/stop condition satisfied, soft-blocker handoff, or hard blocker). Bounded runs follow the same terminal conditions, but also stop at `Iterations: N`.
 
 The runtime checklist stays intentionally small in both modes:
 
@@ -403,7 +403,7 @@ Every iterating run except `exec` extracts structured lessons -- what worked, wh
 - Positive lessons after every kept iteration
 - Strategic lessons after every PIVOT decision
 - Summary lessons at run completion
-- Capacity: 50 entries max, older entries summarized with time decay
+- Capacity target: keep the historical archive at roughly 50 entries while preserving current-run lessons verbatim; older history is summarized with time decay
 
 See `references/lessons-protocol.md` for details.
 
@@ -418,7 +418,7 @@ Instead of blindly retrying after failures, the loop uses a graduated escalation
 | 3 consecutive discards | **REFINE** -- adjust within current strategy |
 | 5 consecutive discards | **PIVOT** -- abandon strategy, try fundamentally different approach |
 | 2 PIVOTs without improvement | **Web search** -- look for external solutions |
-| 3 PIVOTs without improvement | **Soft blocker** -- warn and continue with bolder changes |
+| 3 PIVOTs without improvement | **Soft blocker** -- stop the current run and report that human input, broader scope, or a better metric is needed |
 
 A single successful keep resets all counters. See `references/pivot-protocol.md`.
 
@@ -510,6 +510,8 @@ These files stay uncommitted and are treated as autoresearch-owned artifacts, no
 
 Stateful artifact updates are backed by bundled helper scripts under `<skill-root>/scripts/`, but most users should keep using the single human-facing entrypoint: **`$codex-autoresearch`**. Here `<skill-root>` means the directory containing the loaded `SKILL.md`; in the common repo-local install this is `.agents/skills/codex-autoresearch`.
 
+If you are not automating or debugging the control plane itself, you can stop here and ignore the raw helper commands below.
+
 When you are scripting or debugging the control plane directly, repo-managed helpers are repo-first by default. Prefer:
 
 - `python3 <skill-root>/scripts/autoresearch_resume_check.py --repo <repo>`
@@ -537,11 +539,6 @@ Human-facing usage now has a single entrypoint: **`$codex-autoresearch`**.
 - Before the background runtime starts a session or relaunches one, it runs a script-level preflight: `autoresearch_health_check.py` for integrity checks and `autoresearch_commit_gate.py` for scope-aware git safety.
 - `status` and `stop` are background-only controls. Foreground runs stay in the current session and therefore do not use runtime controller artifacts.
 - `Mode: exec` remains the advanced / CI path for fully specified non-interactive runs.
-
-Advanced backend usage is available when you are scripting or debugging the runtime directly:
-
-- `python3 <skill-root>/scripts/autoresearch_runtime_ctl.py status --repo <repo>`
-- `python3 <skill-root>/scripts/autoresearch_runtime_ctl.py stop --repo <repo>`
 
 
 ---

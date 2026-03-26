@@ -273,6 +273,7 @@ def determine_base_decision(
     last_status = state.get("last_status")
     iteration = as_int(state.get("iteration"))
     iterations_cap = config.get("iterations")
+    pivot_count = as_int(state.get("pivot_count"))
 
     if mode == "exec":
         reasons.append("Exec mode is one-shot and should not be relaunched automatically.")
@@ -295,6 +296,13 @@ def determine_base_decision(
             f"Configured iteration cap reached ({iteration} >= {iterations_cap})."
         )
         return STOP, "iteration_cap_reached", "terminal", reasons
+
+    if pivot_count >= 3:
+        reasons.append(
+            "Three strategic pivots were recorded without a keep. Further unattended relaunches "
+            "would likely waste effort; the run needs human review, broader scope, or a better metric."
+        )
+        return NEEDS_HUMAN, "soft_blocked", "soft_blocked", reasons
 
     reasons.append(
         f"Last recorded status is {last_status!r}; the loop remains resumable and should continue in a fresh Codex session."

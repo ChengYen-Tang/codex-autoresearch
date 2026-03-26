@@ -12,7 +12,7 @@ Use this file as the primary execution checklist during active runs. Keep it sho
 6. Let helper logic own keep/stop gating and row/state semantics.
 7. Foreground's core persistent artifacts are `research-results.tsv` and `autoresearch-state.json`. Background adds launch/runtime control artifacts.
 8. Lessons are secondary helper-derived output, not a primary runtime invariant.
-9. Stop only on goal reached, manual stop, configured iteration cap, or a true blocker.
+9. Stop only on goal reached, manual stop, configured iteration cap, a true blocker, or the documented soft-blocker handoff after strategy exhaustion.
 10. After any context compaction event, re-read `core-principles.md`, this file, and the selected mode workflow before the next iteration.
 11. Every 10 iterations, run the Protocol Fingerprint Check. If any item fails, re-read the loaded runtime docs before continuing.
 

@@ -6,7 +6,7 @@ During active execution, keep `runtime-hard-invariants.md` plus the selected mod
 
 ## Loop Modes
 
-- `unbounded`: default. If the user does not specify `Iterations`, keep iterating until interrupted or a hard blocker appears.
+- `unbounded`: default. If the user does not specify `Iterations`, keep iterating until interrupted or another terminal condition is reached (goal/stop condition satisfied, soft-blocker handoff, or hard blocker).
 - `bounded`: when the user explicitly sets `Iterations: N`.
 
 ## Required Inputs
@@ -386,7 +386,7 @@ For unbounded runs:
 
 - NEVER ask "should I continue?" after launch. The user may be asleep.
 - NEVER pause to ask any question during the loop. If something is unclear, apply best practices and keep going.
-- Continue iterating until the goal is reached, the user explicitly interrupts, the configured iteration cap is reached, or a true blocker appears.
+- Continue iterating until the goal is reached, the user explicitly interrupts, the configured iteration cap is reached, a true blocker appears, or the run reaches the documented soft-blocker handoff.
 - If you run out of obvious ideas, revisit the results log for patterns, try combinations, or attempt bolder changes. Pausing to ask is not an option.
 
 ### PIVOT / REFINE Stuck Recovery
@@ -396,7 +396,7 @@ Replace the simple "5 discards -> re-read" with the graduated escalation system 
 - **3 consecutive discards -> REFINE:** Adjust within current strategy. Consult lessons, change parameters or target files, log as `refine`.
 - **5 consecutive discards -> PIVOT:** Abandon current strategy entirely. Re-read everything, choose a fundamentally different approach, log as `pivot`.
 - **2 PIVOTs without improvement -> Web Search:** Escalate to web search per `references/web-search-protocol.md` (if available and not disabled).
-- **3 PIVOTs without improvement -> Soft Blocker:** Print a warning, continue with increasingly bold changes.
+- **3 PIVOTs without improvement -> Soft Blocker:** Print a warning, stop the current run, and report that human review / broader scope / a better metric is needed.
 
 A single `keep` resets all escalation counters to zero.
 
