@@ -88,6 +88,27 @@ Chaque amelioration s'accumule. Chaque echec est annule. Tout est journalise.
 
 Voir [INSTALL.md](../INSTALL.md) pour plus d'options d'installation. Voir [GUIDE.md](../GUIDE.md) pour le guide complet.
 
+### Hooks de session
+
+Le skill interactif exige maintenant ces session hooks Codex et les installe automatiquement juste apres le premier scan du depot lorsqu'ils manquent. Si vous voulez les preinstaller ou les inspecter manuellement :
+
+```bash
+python3 .agents/skills/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+Ils ajoutent :
+
+- un re-ancrage `SessionStart` qui reinjecte la courte checklist runtime dans les futures nouvelles sessions
+- un hook `Stop` qui ne bloque la fin de session Codex que lorsque l'execution autoresearch semble encore reprenable
+
+Ces hooks ne s'attachent qu'aux sessions Codex ulterieures qui ressemblent clairement a du travail `codex-autoresearch`. Ils ne modifient pas retroactivement la session foreground deja ouverte, et les conversations Codex ordinaires dans le meme depot restent tranquilles.
+
+- Si le skill vient juste d'installer les hooks dans la session courante, `background` peut en profiter immediatement.
+- La session `foreground` deja ouverte ne commencera pas a les utiliser en plein milieu de session.
+- Les executions gerees en `background` transmettent explicitement leurs chemins d'artifacts configures a ces sessions imbriquees, donc les layouts personnalises avec `--results-path` / `--state-path` continuent d'y fonctionner.
+- La session `foreground` deja ouverte ne commencera pas a les utiliser en plein milieu de session. Si vous voulez aussi les hooks la-bas, ouvrez une **nouvelle session Codex** et poursuivez le meme run en rouvrant ou en reprenant le thread actuel. En CLI, c'est souvent `codex resume` ; dans l'application, rouvrez le meme thread dans une nouvelle session.
+- Les futures sessions `foreground` peuvent aussi retrouver les chemins d'artifacts personnalises dans le repo via le hook context pointer du depot, mais les hooks ne s'attachent toujours que lorsque la session ressemble clairement a du travail autoresearch.
+
 ---
 
 ## Ce qu'il fait
@@ -511,12 +532,12 @@ Si vous automatisez ou deboguez la control-plane, les helpers centres sur le rep
 Pour les utilisateurs humains, il n'y a maintenant plus qu'un seul point d'entree principal : **`$codex-autoresearch`**.
 
 - Lors du premier lancement interactif, decrivez naturellement l'objectif, repondez aux questions de confirmation, choisissez explicitement `foreground` ou `background`, puis repondez `go`
-- En `foreground`, Codex reste dans la session courante, continue la boucle en direct et n'ecrit que `research-results.tsv`, `autoresearch-state.json` et les lessons
+- En `foreground`, Codex reste dans la session courante, continue la boucle en direct et ecrit `research-results.tsv`, `autoresearch-state.json`, le `autoresearch-hook-context.json` local au depot, ainsi que les lessons
 - En `background`, Codex ecrit `autoresearch-launch.json` et demarre automatiquement le controleur d'execution detache
 - `foreground` et `background` partagent le meme protocole de boucle, la meme semantique de metrique et les memes regles de repo/scope, mais ils sont mutuellement exclusifs pour un meme repo/run ; n'utilisez pas les deux modes en meme temps sur les memes artefacts du depot primaire
 - Si vous voulez ensuite reprendre ce meme run interactif dans l'autre mode, restez sur la meme entree `$codex-autoresearch` ; avant la reprise, la skill synchronise en interne l'etat partage vers le mode cible, et background `start` effectue automatiquement la meme synchronisation
 - Les executions sur un seul depot restent le cas par defaut ; dans ce cas, le scope declare ne s'applique qu'au depot primaire qui porte les artefacts de controle
-- Si l'experience couvre plusieurs depots, le manifeste de lancement confirme peut aussi declarer des depots companions avec un scope distinct pour chacun. Le preflight du runtime couvre alors tous les depots geres, tandis que `research-results.tsv`, `autoresearch-state.json` et les artefacts de controle restent ancres dans le depot primaire
+- Si l'experience couvre plusieurs depots, le manifeste de lancement confirme peut aussi declarer des depots companions avec un scope distinct pour chacun. Le preflight du runtime couvre alors tous les depots geres, tandis que `research-results.tsv`, `autoresearch-state.json`, `autoresearch-hook-context.json` et les artefacts de controle restent ancres dans le depot primaire
 - Dans ce modele, la colonne `commit` du TSV continue de suivre uniquement le commit du depot primaire ; la provenance des commits des depots companions est conservee dans `autoresearch-state.json`
 - Chaque cycle gere en `background` lance ensuite une session `codex exec` non interactive, avec le prompt runtime transmis via stdin
 - `execution_policy` ne s'applique qu'aux chemins qui lancent des sessions Codex imbriquees, donc `background` et `exec` ; ce skill utilise `danger_full_access` par defaut

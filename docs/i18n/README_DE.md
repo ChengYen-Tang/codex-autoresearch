@@ -86,6 +86,27 @@ Jede Verbesserung akkumuliert sich. Jeder Fehlschlag wird zurueckgesetzt. Alles 
 
 Siehe [INSTALL.md](../INSTALL.md) fuer weitere Installationsoptionen. Siehe [GUIDE.md](../GUIDE.md) fuer die vollstaendige Bedienungsanleitung.
 
+### Optionale Hooks fuer lange Laufzeiten
+
+Das interaktive Skill verlangt diese benutzerweiten Codex-Session-Hooks und installiert sie direkt nach dem ersten Repo-Scan automatisch, wenn sie fehlen. Wenn Sie sie manuell vorab installieren oder pruefen wollen:
+
+```bash
+python3 .agents/skills/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+Sie ergaenzen:
+
+- einen `SessionStart`-Re-Anchor, der die kurze Runtime-Checkliste in spaetere neue Sitzungen erneut einbringt
+- einen `Stop`-Hook, der Codex nur dann am Beenden hindert, wenn der autoresearch-Lauf weiterhin wiederaufnehmbar aussieht
+
+Diese Hooks haengen sich nur an spaetere Codex-Sitzungen, die klar wie `codex-autoresearch`-Arbeit aussehen. Sie veraendern die bereits geoeffnete Foreground-Sitzung nicht nachtraeglich, und unabhaengige Codex-Konversationen im selben Repo bleiben unberuehrt.
+
+- Wenn das Skill die Hooks gerade in der aktuellen Sitzung installiert hat, kann `background` sie sofort nutzen.
+- Die bereits offene `foreground`-Sitzung uebernimmt sie nicht mitten in der Sitzung.
+- Verwaltete `background`-Laeufe reichen ihre konfigurierten Artifact-Pfade explizit an diese verschachtelten Sitzungen weiter, daher funktionieren benutzerdefinierte `--results-path`- / `--state-path`-Layouts dort weiterhin.
+- Die bereits offene `foreground`-Sitzung uebernimmt sie nicht mitten in der Sitzung. Wenn Sie Hooks auch dort wollen, oeffnen Sie eine **neue Codex-Sitzung** und setzen Sie denselben Lauf fort, indem Sie den aktuellen Thread wieder oeffnen oder fortsetzen. In der CLI ist das oft `codex resume`; in der App oeffnen Sie denselben Thread in einer neuen Sitzung.
+- Zukuenftige `foreground`-Sitzungen koennen repo-lokale benutzerdefinierte Artifact-Pfade auch ueber den Hook-Context-Pointer des Repos wiederfinden, aber die Hooks haengen sich weiterhin nur an, wenn die Sitzung klar wie autoresearch aussieht.
+
 ---
 
 ## Was es tut
@@ -509,12 +530,12 @@ Wenn Sie die Control-Plane skripten oder debuggen, verwenden repo-zentrierte Hel
 Fuer Menschen gibt es jetzt nur noch einen einzigen Haupteinstieg: **`$codex-autoresearch`**.
 
 - Beim ersten interaktiven Lauf beschreiben Sie das Ziel natuerlich, beantworten die Rueckfragen, waehlen ausdruecklich `foreground` oder `background` und antworten dann mit `go`
-- In `foreground` bleibt Codex in derselben Sitzung, iteriert live weiter und schreibt nur `research-results.tsv`, `autoresearch-state.json` und Lessons
+- In `foreground` bleibt Codex in derselben Sitzung, iteriert live weiter und schreibt `research-results.tsv`, `autoresearch-state.json`, das repo-lokale `autoresearch-hook-context.json` und Lessons
 - In `background` schreibt Codex automatisch `autoresearch-launch.json` und startet die entkoppelte Laufzeitsteuerung
 - `foreground` und `background` teilen sich dasselbe Loop-Protokoll, dieselbe Metriksemantik und dieselben Repo-/Scope-Regeln, sind fuer denselben Repo-/Run-Kontext aber gegenseitig ausschliessend; lassen Sie nicht beide Modi gleichzeitig dieselben Primaer-Repo-Artefakte schreiben
 - Wenn Sie denselben interaktiven Run spaeter im anderen Modus fortsetzen wollen, bleiben Sie beim selben `$codex-autoresearch`-Einstiegspunkt; vor dem Fortsetzen synchronisiert die Skill-Logik den gemeinsamen State intern auf den Zielmodus, und background `start` fuehrt denselben Schritt automatisch aus
 - Einzelne Repositories bleiben der Standardfall; dann gilt der deklarierte Scope nur fuer das Primaer-Repository, das die Run-Control-Artefakte traegt
-- Wenn das Experiment mehrere Repositories umfasst, kann das bestaetigte Launch-Manifest auch Companion-Repositories mit jeweils eigenem Scope enthalten. Die Runtime-Preflight-Pruefung deckt dann alle verwalteten Repositories ab, waehrend `research-results.tsv`, `autoresearch-state.json` und die Runtime-Control-Artefakte im Primaer-Repository verankert bleiben
+- Wenn das Experiment mehrere Repositories umfasst, kann das bestaetigte Launch-Manifest auch Companion-Repositories mit jeweils eigenem Scope enthalten. Die Runtime-Preflight-Pruefung deckt dann alle verwalteten Repositories ab, waehrend `research-results.tsv`, `autoresearch-state.json`, `autoresearch-hook-context.json` und die Runtime-Control-Artefakte im Primaer-Repository verankert bleiben
 - In diesem Modell bleibt die TSV-Spalte `commit` beim Commit des Primaer-Repositories; die Commit-Provenienz der Companion-Repositories steht stattdessen in `autoresearch-state.json`
 - Jeder weitere verwaltete `background`-Laufzyklus startet eine nicht-interaktive `codex exec`-Sitzung und uebergibt den Runtime-Prompt ueber stdin
 - `execution_policy` gilt nur fuer Pfade, die verschachtelte Codex-Sitzungen starten, also fuer `background` und `exec`; dieses Skill verwendet standardmaessig `danger_full_access`

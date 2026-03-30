@@ -88,6 +88,27 @@ Codex: background 実行を開始します -- ベースライン：47。
 
 その他のインストール方法は [INSTALL.md](../INSTALL.md) を参照。完全な操作マニュアルは [GUIDE.md](../GUIDE.md) を参照。
 
+### セッション Hooks
+
+対話式 skill では、これらの Codex session hooks が必須です。初回の repo scan 直後に不足していれば自動で入れます。手動で事前インストールしたり状態を確認したい場合は次を使えます。
+
+```bash
+python3 .agents/skills/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+追加されるもの:
+
+- `SessionStart` の再アンカー: 後続の新しいセッションに短い runtime checklist を再注入します
+- `Stop` hook: autoresearch run がまだ再開可能に見える場合にだけ、Codex のセッション終了を止めます
+
+これらの hooks は、明らかに `codex-autoresearch` の作業だと分かる後続の Codex セッションにだけ付与されます。いま開いている foreground セッションをその場で変えることはなく、同じ repo の通常の Codex 会話も巻き込みません。
+
+- skill が現在のセッションで hooks を入れた直後なら、`background` はすぐにそれを使えます。
+- すでに開いている `foreground` セッションは途中から hooks を使い始めません。
+- 管理された `background` run は設定済みの artifact path をその入れ子セッションへ明示的に渡すので、カスタム `--results-path` / `--state-path` でもそのまま機能します。
+- すでに開いている `foreground` セッションは途中から hooks を使い始めません。前景でも hooks を効かせたいなら、**新しい Codex セッション**を開き、そこで現在のスレッドを開き直すか再開して同じ run を続けてください。CLI では通常 `codex resume`、アプリでは同じスレッドを新しいセッションで開き直します。
+- 今後の `foreground` セッションでも、repo 内のカスタム artifact path は repo の hook context pointer から復元できます。ただし hooks 自体は、そのセッションが明確に autoresearch の作業だと分かる場合にだけ付与されます。
+
 ---
 
 ## 何をするのか
@@ -509,12 +530,12 @@ control-plane をスクリプト化したりデバッグしたりする場合、
 人間向けの公開入口は、いまは **`$codex-autoresearch`** ひとつだけです。
 
 - 最初の対話実行では、目標を自然に説明し、確認の質問に答え、`foreground` か `background` を明示的に選んでから `go` と返します
-- `foreground` では Codex は現在のセッション内に残り、そのまま反復を続けます。作られるのは `research-results.tsv`、`autoresearch-state.json`、lessons だけです
+- `foreground` では Codex は現在のセッション内に残り、そのまま反復を続けます。作られるのは `research-results.tsv`、`autoresearch-state.json`、repo ローカルの `autoresearch-hook-context.json`、そして lessons です
 - `background` では Codex は `autoresearch-launch.json` を書き込み、切り離された実行コントローラを自動で起動します
 - `foreground` と `background` は同じ loop プロトコル、metric の意味、repo/scope ルールを共有しますが、同じ repo/run に対しては排他的です。同じ primary repo の artifacts に対して両方を同時に走らせないでください
 - 後から同じ interactive run を別のモードで続けたい場合でも、入口は同じ `$codex-autoresearch` のままです。続行前に、skill が内部で共有 state を選んだモードへ同期し、background `start` も同じ同期を自動で行います
 - 単一リポジトリの実行は引き続きデフォルトです。この場合、宣言した scope は run-control 工程を保持する primary repo にだけ適用されます
-- 実験が複数リポジトリにまたがる場合、確認済みの launch manifest には companion repos と各 repo 固有の scope も記述できます。runtime preflight は管理対象の全 repo を検査しますが、`research-results.tsv`、`autoresearch-state.json`、runtime-control の各工件は primary repo に置かれたままです
+- 実験が複数リポジトリにまたがる場合、確認済みの launch manifest には companion repos と各 repo 固有の scope も記述できます。runtime preflight は管理対象の全 repo を検査しますが、`research-results.tsv`、`autoresearch-state.json`、`autoresearch-hook-context.json`、runtime-control の各工件は primary repo に置かれたままです
 - このモデルでは TSV の `commit` 列は引き続き primary repo の commit だけを記録し、companion repo ごとの commit provenance は `autoresearch-state.json` に保存されます
 - `background` の各 managed runtime cycle は、runtime prompt を stdin で渡した非対話の `codex exec` セッションとして実行されます
 - `execution_policy` はネストした Codex セッションを起動する経路、つまり `background` と `exec` にだけ適用されます。この skill の既定値は `danger_full_access` です

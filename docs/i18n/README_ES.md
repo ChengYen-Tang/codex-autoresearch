@@ -88,6 +88,27 @@ Las mejoras se acumulan. Los fallos se revierten. Todo queda registrado.
 
 Mas opciones de instalacion en [INSTALL.md](../INSTALL.md). Manual completo en [GUIDE.md](../GUIDE.md).
 
+### Hooks de sesion
+
+El skill interactivo ahora exige estos session hooks de Codex y los instala automaticamente justo despues del primer escaneo del repo cuando faltan. Si quieres preinstalarlos o inspeccionarlos manualmente:
+
+```bash
+python3 .agents/skills/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+Anaden:
+
+- un re-anchor de `SessionStart` que vuelve a inyectar la checklist corta de runtime en sesiones nuevas posteriores
+- un hook `Stop` que solo impide que Codex cierre la sesion cuando el run de autoresearch sigue pareciendo reanudable
+
+Estos hooks solo se adjuntan a sesiones posteriores de Codex que claramente parecen trabajo de `codex-autoresearch`. No cambian retroactivamente la sesion de foreground que ya esta abierta, y las conversaciones normales de Codex en el mismo repo quedan intactas.
+
+- Si el skill acaba de instalar los hooks en la sesion actual, `background` puede usarlos de inmediato.
+- La sesion de `foreground` que ya esta abierta no empezara a usarlos a mitad de la sesion.
+- Los runs gestionados en `background` pasan de forma explicita sus rutas configuradas de artifacts a esas sesiones anidadas, asi que los layouts personalizados con `--results-path` / `--state-path` siguen funcionando alli.
+- La sesion de `foreground` que ya esta abierta no empezara a usarlos a mitad de la sesion. Si quieres hooks tambien ahi, abre una **nueva sesion de Codex** y continua el mismo run reabriendo o reanudando el hilo actual. En la CLI esto suele ser `codex resume`; en la app, vuelve a abrir el mismo hilo en una sesion nueva.
+- Las futuras sesiones de `foreground` tambien pueden recuperar rutas personalizadas de artifacts dentro del repo mediante el hook context pointer del repositorio, pero los hooks siguen adjuntandose solo cuando la sesion claramente parece trabajo de autoresearch.
+
 ---
 
 ## Que hace
@@ -511,12 +532,12 @@ Si estas automatizando o depurando el control-plane, los helpers orientados al r
 De cara al usuario humano, ahora solo hay un punto de entrada principal: **`$codex-autoresearch`**.
 
 - En la primera ejecucion interactiva, describe el objetivo de forma natural, responde las preguntas de confirmacion, elige explicitamente `foreground` o `background` y luego contesta `go`
-- En `foreground`, Codex se queda en la sesion actual, sigue iterando en primer plano y solo escribe `research-results.tsv`, `autoresearch-state.json` y lessons
+- En `foreground`, Codex se queda en la sesion actual, sigue iterando en primer plano y escribe `research-results.tsv`, `autoresearch-state.json`, el `autoresearch-hook-context.json` local del repo y lessons
 - En `background`, Codex escribe `autoresearch-launch.json` y arranca automaticamente el controlador de ejecucion desacoplado
 - `foreground` y `background` comparten el mismo protocolo de loop, la misma semantica de metricas y las mismas reglas de repo/scope, pero son mutuamente excluyentes para un mismo repo/run; no ejecutes ambos modos a la vez sobre los mismos artefactos del repo primario
 - Si despues quieres continuar ese mismo run interactivo en el otro modo, sigue usando la misma entrada `$codex-autoresearch`; antes de continuar, la skill sincroniza internamente el estado compartido con el modo elegido, y background `start` hace automaticamente el mismo paso
 - Las ejecuciones de un solo repositorio siguen siendo la opcion por defecto; en ese caso el scope declarado solo se aplica al repositorio primario que guarda los artefactos de control
-- Si el experimento abarca varios repositorios, el manifiesto de lanzamiento confirmado tambien puede declarar repositorios companion, cada uno con su propio scope. El preflight del runtime revisa todos los repositorios gestionados, mientras que `research-results.tsv`, `autoresearch-state.json` y los artefactos de control siguen anclados en el repositorio primario
+- Si el experimento abarca varios repositorios, el manifiesto de lanzamiento confirmado tambien puede declarar repositorios companion, cada uno con su propio scope. El preflight del runtime revisa todos los repositorios gestionados, mientras que `research-results.tsv`, `autoresearch-state.json`, `autoresearch-hook-context.json` y los artefactos de control siguen anclados en el repositorio primario
 - En ese modelo, la columna `commit` del TSV sigue registrando solo el commit del repositorio primario; la procedencia de commits por repositorio para los companion repos queda en `autoresearch-state.json`
 - Cada ciclo gestionado en `background` lanza una sesion no interactiva de `codex exec` y pasa el prompt del runtime por stdin
 - `execution_policy` solo aplica a los caminos que arrancan sesiones Codex anidadas, es decir, `background` y `exec`; este skill usa `danger_full_access` por defecto

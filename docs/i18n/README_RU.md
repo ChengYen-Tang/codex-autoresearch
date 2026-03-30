@@ -88,6 +88,27 @@ Codex: Запускаю background-режим -- базовая линия: 47.
 
 Другие способы установки см. в [INSTALL.md](../INSTALL.md). Полное руководство см. в [GUIDE.md](../GUIDE.md).
 
+### Session Hooks
+
+Интерактивный skill теперь требует эти session hooks Codex и автоматически устанавливает их сразу после первого сканирования repo, если их не хватает. Если вы хотите заранее установить их вручную или проверить состояние:
+
+```bash
+python3 .agents/skills/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+Они добавляют:
+
+- повторный якорь `SessionStart`, который заново внедряет короткий runtime checklist в будущие новые сессии
+- hook `Stop`, который мешает Codex завершать сессию только тогда, когда autoresearch run всё ещё выглядит возобновляемым
+
+Эти hooks цепляются только к будущим сессиям, которые явно похожи на работу `codex-autoresearch`. Обычные разговоры Codex в том же репозитории они не трогают.
+
+- Если skill только что установил hooks в текущей сессии, `background` сможет использовать их сразу.
+- Уже открытая сессия `foreground` не начнет использовать их посреди работы.
+- Управляемые `background`-запуски явно передают этим вложенным сессиям свои настроенные пути artifacts, поэтому кастомные `--results-path` / `--state-path` продолжают там работать.
+- Уже открытая сессия `foreground` не начнет использовать их посреди работы. Если вы хотите hooks и там, откройте **новую сессию Codex** и продолжите тот же run, заново открыв или возобновив текущий тред. В CLI это часто `codex resume`, а в приложении нужно открыть тот же тред в новой сессии.
+- Будущие сессии `foreground` тоже могут восстановить пользовательские пути artifacts внутри repo через hook context pointer репозитория, но сами hooks по-прежнему подключаются только тогда, когда сессия явно выглядит как работа autoresearch.
+
 ---
 
 ## Что он делает
@@ -509,12 +530,12 @@ iteration  commit   metric  delta   status    description
 Для человека теперь остается только одна основная точка входа: **`$codex-autoresearch`**.
 
 - В первом интерактивном запуске опишите цель естественным языком, ответьте на вопросы подтверждения, явно выберите `foreground` или `background`, затем напишите `go`
-- В `foreground` Codex остается в текущей сессии, продолжает цикл вживую и пишет только `research-results.tsv`, `autoresearch-state.json` и lessons
+- В `foreground` Codex остается в текущей сессии, продолжает цикл вживую и пишет `research-results.tsv`, `autoresearch-state.json`, локальный для repo `autoresearch-hook-context.json` и lessons
 - В `background` Codex записывает `autoresearch-launch.json` и автоматически запускает отсоединенный контроллер выполнения
 - `foreground` и `background` используют один и тот же loop-протокол, одну и ту же семантику метрик и одни и те же правила repo/scope, но для одного и того же repo/run они взаимоисключающи; не запускайте оба режима одновременно поверх одних и тех же артефактов primary repo
 - Если позже вы захотите продолжить тот же interactive run в другом режиме, оставайтесь на том же входе `$codex-autoresearch`; перед продолжением skill внутренне синхронизирует общий state с выбранным режимом, а background `start` автоматически делает тот же шаг
 - Запуски в одном репозитории остаются вариантом по умолчанию; в этом случае объявленный scope относится только к primary repo, где лежат run-control артефакты
-- Если эксперимент затрагивает несколько репозиториев, подтвержденный launch manifest может также перечислять companion repos, у каждого из которых свой scope. Runtime preflight проверяет все управляемые репозитории, но `research-results.tsv`, `autoresearch-state.json` и runtime-control артефакты по-прежнему привязаны к primary repo
+- Если эксперимент затрагивает несколько репозиториев, подтвержденный launch manifest может также перечислять companion repos, у каждого из которых свой scope. Runtime preflight проверяет все управляемые репозитории, но `research-results.tsv`, `autoresearch-state.json`, `autoresearch-hook-context.json` и runtime-control артефакты по-прежнему привязаны к primary repo
 - В этой модели колонка `commit` в TSV по-прежнему хранит только commit primary repo, а provenance commit-ов для companion repos записывается в `autoresearch-state.json`
 - Каждый следующий `background` managed runtime cycle запускает неинтерактивную сессию `codex exec` и передает runtime prompt через stdin
 - `execution_policy` применяется только к путям, которые запускают вложенные сессии Codex, то есть к `background` и `exec`; у этого skill значением по умолчанию является `danger_full_access`

@@ -77,6 +77,27 @@ Once execution begins, keep the runtime contract tiny:
 - record every completed experiment before the next one starts
 - use helper scripts for authoritative log/state updates
 
+### Required Session Hooks
+
+The interactive skill requires these user-level Codex session hooks and auto-installs them right after the initial repo scan when they are missing. This bootstrap happens before the first clarification question. If you want to preinstall them yourself:
+
+```bash
+python3 /absolute/path/to/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install
+```
+
+They provide the continuity layer for the interactive skill:
+
+- `SessionStart` re-anchors future sessions with the short runtime checklist
+- `Stop` only blocks Codex from ending a session when the autoresearch run still appears resumable
+
+These hooks only attach to later Codex sessions that clearly look like `codex-autoresearch` work. They do not retroactively change the foreground session already open in front of you, and unrelated Codex conversations in the same repo are left alone.
+
+- If the skill just installed them in the current session, `background` can use them immediately.
+- The foreground session already open in front of you will **not** start using them mid-session. To get hooks there, reopen/resume the same thread in a new Codex session.
+- Managed `background` runs explicitly pass their configured artifact paths into those nested sessions, so custom `--results-path` / `--state-path` layouts continue to work there.
+- In the CLI this reopen/resume path is often `codex resume`; in the app, reopen the same thread in a new session.
+- Future `foreground` sessions can also recover repo-local custom artifact paths through the repo's hook context pointer, but hooks still require an explicit autoresearch session signal before they attach.
+
 ---
 
 ## The Iteration Cycle
@@ -440,7 +461,7 @@ Progress summaries print every 5 iterations. Bounded runs print a final baseline
 
 The TSV file is the real audit trail -- not the git history (failed experiments are reverted from git but preserved in the log).
 
-`research-results.tsv`, `autoresearch-state.json`, and `autoresearch-lessons.md` are treated as autoresearch-owned artifacts: they stay uncommitted and are not staged as experiment changes.
+`research-results.tsv`, `autoresearch-state.json`, `autoresearch-hook-context.json`, and `autoresearch-lessons.md` are treated as autoresearch-owned artifacts: they stay uncommitted and are not staged as experiment changes.
 
 ---
 
@@ -459,12 +480,12 @@ If unrelated uncommitted changes exist:
 
 | Mode | What it produces |
 |------|------------------|
-| loop | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json` |
+| loop | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, `autoresearch-hook-context.json` |
 | plan | Config block printed inline (ready to paste) |
-| debug | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `debug/{YYMMDD}-{HHMM}-{slug}/` findings |
-| fix | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `fix/{YYMMDD}-{HHMM}-{slug}/` fix log |
-| security | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `security/{YYMMDD}-{HHMM}-{slug}/` audit report |
-| ship | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, plus `ship/{YYMMDD}-{HHMM}-{slug}/` checklist and verification |
+| debug | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, `autoresearch-hook-context.json`, plus `debug/{YYMMDD}-{HHMM}-{slug}/` findings |
+| fix | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, `autoresearch-hook-context.json`, plus `fix/{YYMMDD}-{HHMM}-{slug}/` fix log |
+| security | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, `autoresearch-hook-context.json`, plus `security/{YYMMDD}-{HHMM}-{slug}/` audit report |
+| ship | `research-results.tsv`, `autoresearch-lessons.md`, `autoresearch-state.json`, `autoresearch-hook-context.json`, plus `ship/{YYMMDD}-{HHMM}-{slug}/` checklist and verification |
 | exec | `research-results.tsv`, JSON lines to stdout, exit code |
 
 ---
@@ -564,12 +585,12 @@ The public human workflow now stays on a single entrypoint: `$codex-autoresearch
 2. Answer the confirmation questions.
 3. Choose **foreground** or **background**.
 4. Reply `go`.
-5. In **foreground**, Codex keeps the loop in the current session. Only `research-results.tsv`, `autoresearch-state.json`, and lessons are created.
+5. In **foreground**, Codex keeps the loop in the current session. `research-results.tsv`, `autoresearch-state.json`, the repo-local `autoresearch-hook-context.json`, and lessons are created.
 6. In **background**, Codex writes `autoresearch-launch.json` and starts the detached runtime controller automatically.
    The two modes share the same loop protocol and repo/scope semantics, but they are mutually exclusive for a given repo/run. Do not keep both modes active against the same primary repo artifacts at once.
 7. If you resume an existing interactive run in the other mode, continue through the same `$codex-autoresearch` entrypoint. The shared state must be synchronized to the chosen mode before continuing; scripted background `start` performs that sync automatically before it relaunches.
 8. Single-repo runs are still the default. In that case the declared scope applies only to the primary repo that owns the run-control artifacts.
-9. If the experiment spans multiple repos, either mode can declare companion repos with their own scopes. `research-results.tsv` and `autoresearch-state.json` stay anchored in the primary repo; background mode also keeps launch/runtime control files there.
+9. If the experiment spans multiple repos, either mode can declare companion repos with their own scopes. `research-results.tsv`, `autoresearch-state.json`, and `autoresearch-hook-context.json` stay anchored in the primary repo; background mode also keeps launch/runtime control files there.
    Script-level entrypoints represent this with repeated `--companion-repo-scope PATH=SCOPE` flags.
    The TSV `commit` column remains the primary repo commit; companion-repo commit provenance lives in `autoresearch-state.json`.
 10. Each background runtime cycle launches a non-interactive `codex exec` session with the runtime prompt supplied on stdin.
