@@ -23,7 +23,7 @@ When this file mentions `<skill-root>`, it means the directory containing the lo
 9. The user should never see raw field names (Goal, Scope, Metric, Direction, Verify, Guard). Translate everything into natural conversation.
 10. After the user approves the summary, follow the chosen run mode directly from the same skill entrypoint. Foreground stays in the current session; background persists the confirmed launch manifest and starts the runtime controller. Do not tell the user to switch to a different wrapper command.
 11. End the confirmation summary with a short runtime checklist that reinforces execution order: baseline first, then initialize artifacts, and always log a completed experiment before starting the next one.
-12. For every new interactive foreground/background run, immediately after the initial repo scan check `python3 <skill-root>/scripts/autoresearch_hooks_ctl.py status`. If hooks are missing, install them automatically before clarification continues. Do not turn this into a separate approval step. If hooks were just installed in the current session, keep one short mode-shaping note ready: `background` can use them immediately, while the current `foreground` session would need a new Codex session / reopened thread to pick them up.
+12. For every new interactive foreground/background run, immediately after the initial repo scan check `python3 <skill-root>/scripts/autoresearch_hooks_ctl.py status`. If the status is not ready for future sessions, automatically install or repair the managed hooks before clarification continues. Do not turn this into a separate approval step. If hooks were just installed in the current session, keep one short mode-shaping note ready: `background` can use them immediately, while the current `foreground` session would need a new Codex session / reopened thread to pick them up.
 
 ## Clarification Protocol
 
@@ -31,7 +31,7 @@ When this file mentions `<skill-root>`, it means the directory containing the lo
 
 Read the repo to understand what exists -- source files, training scripts, config files, test suites, build systems, CI configs, etc. Check manifest files (`package.json`, `requirements.txt`, `pyproject.toml`, `go.mod`, etc.) to understand the stack before asking about it.
 
-Immediately after this scan, check `autoresearch_hooks_ctl.py status` for every new interactive run. If hooks are missing, install them automatically before asking the next clarification question.
+Immediately after this scan, check `autoresearch_hooks_ctl.py status` for every new interactive run. If the status is not ready for future sessions, automatically install or repair the managed hooks before asking the next clarification question.
 
 ### Step 2: Guided Questions (MANDATORY -- at least 1 round)
 

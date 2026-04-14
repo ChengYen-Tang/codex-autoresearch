@@ -106,8 +106,8 @@ if ! grep -n '^\s*display_name:' "$ROOT/agents/openai.yaml" >/dev/null; then
   exit 1
 fi
 
-if ! grep -n 'allow_implicit_invocation:' "$ROOT/agents/openai.yaml" >/dev/null; then
-  echo "agents/openai.yaml is missing allow_implicit_invocation policy" >&2
+if ! grep -n '^\s*allow_implicit_invocation:\s*false\s*$' "$ROOT/agents/openai.yaml" >/dev/null; then
+  echo "agents/openai.yaml must disable implicit invocation to preserve hook identity" >&2
   exit 1
 fi
 

@@ -71,7 +71,7 @@ Expected behavior:
 
 ## Required Session Hooks
 
-The interactive skill requires these user-level Codex session hooks and auto-installs them right after the initial repo scan when they are missing. This bootstrap happens before the first clarification question. If you want to preinstall or inspect them manually:
+The interactive skill requires these user-level Codex session hooks and auto-installs or repairs them right after the initial repo scan whenever `autoresearch_hooks_ctl.py status` is not ready for future sessions. This bootstrap happens before the first clarification question. If you want to preinstall or inspect them manually:
 
 ```bash
 python3 /absolute/path/to/codex-autoresearch/scripts/autoresearch_hooks_ctl.py install

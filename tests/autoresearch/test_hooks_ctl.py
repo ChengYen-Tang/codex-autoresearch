@@ -97,6 +97,7 @@ class AutoresearchHooksCtlTest(AutoresearchScriptsTestBase):
             self.assertTrue(installed["ready_for_future_sessions"])
             self.assertTrue(installed["feature_enabled"])
             self.assertTrue(installed["managed_scripts_present"])
+            self.assertTrue(self.installed_hook_path(home, "autoresearch_supervisor_status.py").exists())
 
             hooks_payload = json.loads((codex_home / "hooks.json").read_text(encoding="utf-8"))
             self.assertIn("UserPromptSubmit", hooks_payload["hooks"])
@@ -173,6 +174,7 @@ class AutoresearchHooksCtlTest(AutoresearchScriptsTestBase):
             self.assertFalse(self.installed_hook_path(home, "autoresearch_hook_context.py").exists())
             self.assertFalse(self.installed_hook_path(home, "session_start.py").exists())
             self.assertFalse(self.installed_hook_path(home, "stop.py").exists())
+            self.assertFalse(self.installed_hook_path(home, "autoresearch_supervisor_status.py").exists())
 
     def test_session_start_hook_requires_an_autoresearch_session_signal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -592,3 +594,63 @@ class AutoresearchHooksCtlTest(AutoresearchScriptsTestBase):
             completed.check_returncode()
             payload = json.loads(completed.stdout)
             self.assertEqual(payload["decision"], "block")
+
+    def test_installed_stop_hook_uses_managed_helper_bundle_without_source_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            env = self.hook_env(home)
+            self.run_script("autoresearch_hooks_ctl.py", "install", env=env)
+
+            manifest = self.installed_hook_path(home, "manifest.json")
+            manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
+            manifest_payload["helper_root_fallback"] = "/nonexistent/autoresearch-hooks"
+            manifest_payload["skill_root_fallback"] = "/nonexistent/codex-autoresearch"
+            manifest.write_text(json.dumps(manifest_payload, indent=2) + "\n", encoding="utf-8")
+
+            hook_path = self.installed_hook_path(home, "stop.py")
+            repo = root / "active-repo"
+            repo.mkdir()
+            self.run_script(
+                "autoresearch_init_run.py",
+                "--results-path",
+                str(repo / "research-results.tsv"),
+                "--state-path",
+                str(repo / "autoresearch-state.json"),
+                "--mode",
+                "loop",
+                "--goal",
+                "Reduce failures",
+                "--scope",
+                "src/**/*.py",
+                "--metric-name",
+                "failure count",
+                "--direction",
+                "lower",
+                "--verify",
+                "pytest -q",
+                "--baseline-metric",
+                "10",
+                "--baseline-commit",
+                "base111",
+                "--baseline-description",
+                "baseline failures",
+                env=env,
+            )
+
+            transcript_path = root / "foreground-rollout.jsonl"
+            self.write_transcript_marker(transcript_path)
+            completed = self.run_installed_hook(
+                hook_path,
+                cwd=repo,
+                payload={
+                    "cwd": str(repo),
+                    "stop_hook_active": False,
+                    "transcript_path": str(transcript_path),
+                },
+                env=env,
+            )
+            completed.check_returncode()
+            payload = json.loads(completed.stdout)
+            self.assertEqual(payload["decision"], "block")
+            self.assertIn("Do not rerun the wizard.", payload["reason"])

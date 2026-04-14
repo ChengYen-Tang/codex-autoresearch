@@ -19,6 +19,10 @@ class CheckSkillInvariantsTest(unittest.TestCase):
             text=True,
         )
 
+    def test_openai_manifest_disables_implicit_invocation(self) -> None:
+        manifest = (REPO_ROOT / "agents" / "openai.yaml").read_text(encoding="utf-8")
+        self.assertRegex(manifest, r"(?m)^\s*allow_implicit_invocation:\s*false\s*$")
+
     def write_exec_repo(self, repo: Path) -> None:
         (repo / "research-results.tsv").write_text(
             "\n".join(

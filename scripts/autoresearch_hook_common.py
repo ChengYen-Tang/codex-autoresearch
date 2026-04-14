@@ -17,9 +17,17 @@ MARKER_FILES = (
     "autoresearch-runtime.json",
     "autoresearch-state.json",
 )
-SKILL_ROOT_RELATIVE_CANDIDATES = (
+HELPER_ROOT_RELATIVE_CANDIDATES = (
     Path(".agents/skills/codex-autoresearch"),
     Path(".codex/skills/codex-autoresearch"),
+)
+HELPER_REQUIRED_FILES = (
+    "autoresearch_supervisor_status.py",
+    "autoresearch_helpers.py",
+    "autoresearch_artifacts.py",
+    "autoresearch_core.py",
+    "autoresearch_paths.py",
+    "autoresearch_repo_targets.py",
 )
 RESULTS_HEADER_PREFIX = "iteration\tcommit\tmetric\t"
 AUTORESEARCH_SKILL_MARKER = "$codex-autoresearch"
@@ -45,7 +53,7 @@ class HookContext:
     payload: dict[str, object]
     cwd: Path
     repo: Path
-    skill_root: Path | None
+    helper_root: Path | None
     artifacts: HookArtifactPaths
     opt_in_env: bool
     transcript_marked: bool
@@ -136,36 +144,48 @@ def results_log_looks_autoresearch(results_path: Path) -> bool:
     return False
 
 
-def valid_skill_root(path: Path | None) -> Path | None:
+def helper_bundle_present(path: Path) -> bool:
+    return all((path / name).exists() for name in HELPER_REQUIRED_FILES)
+
+
+def valid_helper_root(path: Path | None) -> Path | None:
     if path is None:
         return None
     resolved = path.expanduser().resolve()
-    if not resolved.exists():
-        return None
-    if not (resolved / "SKILL.md").exists():
-        return None
-    helper = resolved / "scripts" / "autoresearch_supervisor_status.py"
-    if not helper.exists():
-        return None
-    return resolved
+    for candidate in (resolved, resolved / "scripts"):
+        if candidate.exists() and helper_bundle_present(candidate):
+            return candidate
+    return None
 
 
-def resolve_skill_root(cwd: Path, manifest: dict[str, object]) -> Path | None:
+def resolve_helper_root(
+    *,
+    script_path: str | Path,
+    cwd: Path,
+    manifest: dict[str, object],
+) -> Path | None:
+    local = valid_helper_root(Path(script_path).resolve().parent)
+    if local is not None:
+        return local
+
     for base in (cwd, *cwd.parents):
-        for relative in SKILL_ROOT_RELATIVE_CANDIDATES:
-            candidate = valid_skill_root(base / relative)
+        for relative in HELPER_ROOT_RELATIVE_CANDIDATES:
+            candidate = valid_helper_root(base / relative)
             if candidate is not None:
                 return candidate
 
     home = Path.home()
-    for relative in SKILL_ROOT_RELATIVE_CANDIDATES:
-        candidate = valid_skill_root(home / relative)
+    for relative in HELPER_ROOT_RELATIVE_CANDIDATES:
+        candidate = valid_helper_root(home / relative)
         if candidate is not None:
             return candidate
 
-    fallback = manifest.get("skill_root_fallback")
-    if isinstance(fallback, str):
-        return valid_skill_root(Path(fallback))
+    for key in ("helper_root_fallback", "skill_root_fallback"):
+        fallback = manifest.get(key)
+        if isinstance(fallback, str):
+            candidate = valid_helper_root(Path(fallback))
+            if candidate is not None:
+                return candidate
     return None
 
 
@@ -295,7 +315,7 @@ def build_context(script_path: str | Path) -> HookContext | None:
         payload=payload,
         cwd=cwd,
         repo=repo,
-        skill_root=resolve_skill_root(cwd, manifest),
+        helper_root=resolve_helper_root(script_path=script_path, cwd=cwd, manifest=manifest),
         artifacts=artifacts,
         opt_in_env=env_truthy(HOOK_ACTIVE_ENV),
         transcript_marked=transcript_indicates_autoresearch_session(transcript_path),
