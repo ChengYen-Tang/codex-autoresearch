@@ -32,7 +32,7 @@ from autoresearch_runtime_ops import (
 
 def add_manifest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo", required=True)
-    parser.add_argument("--workspace-root")
+    parser.add_argument("--workspace-root", required=True)
     parser.add_argument("--launch-path", help=argparse.SUPPRESS)
     parser.add_argument("--original-goal", required=True)
     parser.add_argument("--prompt-text")

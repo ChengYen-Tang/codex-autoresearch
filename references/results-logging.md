@@ -131,6 +131,8 @@ The metrics model is intentionally small:
 
 Do not use legacy `metric` / `op` / `value` fields, an `all` wrapper, or the `!=` operator.
 
+When `verify_format=scalar`, the verify command must emit a single numeric metric as its final non-empty output line. Do not heuristically scrape banner text, earlier lines, or arbitrary regex matches during the loop. If the command is noisy, tighten the verify command during setup so the final line is mechanically parseable.
+
 When `verify_format=metrics_json`, the verify command must print a JSON object as its final non-empty output line. That JSON object is the metrics map used by the helpers. It must include `primary_metric_key` plus every metric referenced by `acceptance_criteria` and `required_keep_criteria`. Helpers must not synthesize missing metrics from the scalar primary metric in this mode.
 
 `results.tsv` records only the primary metric. Structured metrics and acceptance states live in `state.json`.

@@ -77,6 +77,8 @@ This writes the baseline TSV row (`iteration = 0`) and the matching JSON snapsho
 
 Here `<skill-root>` is the directory containing the loaded `SKILL.md`. In the common repo-local install this is usually `.agents/skills/codex-autoresearch`, so the exact command becomes `python3 .agents/skills/codex-autoresearch/scripts/...`.
 
+Bundled helpers expose `--force` only as an internal maintenance override for tests or deliberate manual recovery. Normal skill flow should prefer explicit fresh-start archival instead of using `--force` to bypass legacy-layout or existing-artifact protection.
+
 Exec-mode exception:
 - Let the helper scripts use their scratch JSON state under `/tmp/codex-autoresearch-exec/...`.
 - Clean that scratch state before exit with `python3 <skill-root>/scripts/autoresearch_exec_state.py --cleanup`.
@@ -260,6 +262,13 @@ Rules:
 - if there is no diff, log `no-op` and move on (counts toward the consecutive-discard threshold for stuck recovery),
 - prefer descriptive `experiment:` commit messages.
 
+Commit failure policy:
+
+- if `git commit` reports "nothing to commit", treat the attempt as `no-op` with no retry;
+- if `git commit` fails because of a transient repo-plumbing issue (for example `index.lock` or another temporary git file lock), re-read `git status` and retry once;
+- if the retry still fails, or a pre-commit hook / repository policy rejects the diff, treat the attempt as `crash`; fix only trivial issues if the hypothesis is still valid, retry at most 2 quick times, otherwise restore a clean worktree with the approved rollback strategy and log `crash`;
+- if the repository itself is broken (permissions, corrupt index, disk full), treat it as a hard blocker.
+
 If the workspace is not safe for commits, log a hard blocker and stop the loop. Do not ask -- report the situation in the completion summary.
 
 ## Phase 6: Verify
@@ -272,6 +281,14 @@ Capture:
 - relevant stderr or stdout excerpt,
 - wall clock duration,
 - crash signal if any.
+
+Metric parsing contract:
+
+- if `verify_format=scalar`, the final non-empty verify output line must be a single numeric scalar parseable as the metric value;
+- if `verify_format=metrics_json`, follow the final-line JSON contract in `references/results-logging.md`;
+- do not guess from banner text, earlier lines, or arbitrary regex scraping during the loop; if output is noisy, tighten the verify command during setup instead;
+- if verify output is unparseable, rerun verify once only to rule out transient truncation or shell noise; if the second run is still unparseable, treat the attempt as `crash`;
+- if the baseline itself cannot be parsed, do not launch the loop; fix the verify command first or stop with a blocker.
 
 Timeout rule:
 
@@ -433,16 +450,7 @@ Run the Protocol Fingerprint Check when any of the following is true:
 
 ### Protocol Fingerprint Check
 
-A zero-token self-check. Use `runtime-hard-invariants.md` plus the selected mode workflow as the source of truth. Internally verify that you can still recall:
-
-1. baseline before init,
-2. every completed experiment must be logged before the next one starts,
-3. helper scripts own authoritative TSV/JSON updates and keep/stop gating,
-4. all normal run artifacts are workspace-owned under `autoresearch-results/`, with background adding `launch.json`, `runtime.json`, and `runtime.log`,
-5. the current stop conditions for this run,
-6. the current rollback strategy in use,
-7. the active pivot/refine escalation thresholds when they matter,
-8. the selected mode workflow's key deviation from the default loop.
+A zero-token self-check. Use `runtime-hard-invariants.md` plus the selected mode workflow as the source of truth. Internally verify the exact Protocol Fingerprint Check published in `runtime-hard-invariants.md`; do not maintain a second, looser copy of the checklist here.
 
 ### On Failure
 
@@ -475,7 +483,7 @@ Every 5 iterations and at completion, summarize:
 
 A **hard blocker** is any condition that makes continued iteration unsafe or meaningless:
 
-- the verify command no longer exists or returns unparseable output,
+- the verify command no longer exists, or its final metric line remains unparseable after one clean retry,
 - scope files have been deleted externally,
 - the git repository is in a broken state,
 - disk space is exhausted,

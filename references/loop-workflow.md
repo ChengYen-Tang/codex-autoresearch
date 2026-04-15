@@ -2,7 +2,7 @@
 
 Use this workflow for the default metric-driven improve/verify loop.
 
-This is the thin execution guide for active runtime work. Keep `runtime-hard-invariants.md` in memory while you iterate. Use `autonomous-loop-protocol.md` only when you need detailed reference for setup, recovery, or escalation behavior.
+This is the thin execution guide for active runtime work. Load `autonomous-loop-protocol.md` for Phase 0 on every fresh launch, resume boundary, or recovery decision. Once the loop is running, keep `runtime-hard-invariants.md` in memory and reopen `autonomous-loop-protocol.md` only when you need detailed recovery, health-check, or escalation behavior.
 
 ## Purpose
 

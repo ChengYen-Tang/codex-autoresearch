@@ -24,8 +24,10 @@ Verify you can still recall:
 - log every completed experiment before the next one starts,
 - helper scripts own authoritative TSV/JSON updates and keep/stop gating,
 - artifact paths come from `workspace_root` + `autoresearch-results/` and the git-local pointer, never from repo-root artifact guessing,
-- the current stop conditions and rollback strategy,
-- the selected mode workflow plus any active pivot/refine escalation.
+- the current stop conditions for this run,
+- the current rollback strategy in use,
+- the active pivot/refine escalation thresholds when they matter,
+- the selected mode workflow's key deviation from the default loop.
 
 ## Closeout Order
 

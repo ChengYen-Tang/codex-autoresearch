@@ -22,6 +22,36 @@ import autoresearch_launch_gate
 class AutoresearchRuntimeControllerTest(AutoresearchScriptsTestBase):
     maxDiff = None
 
+    def test_create_launch_manifest_requires_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.init_git_repo(Path(tmp) / "repo")
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS_DIR / "autoresearch_runtime_ctl.py"),
+                    "create-launch",
+                    "--repo",
+                    str(repo),
+                    "--original-goal",
+                    "Reduce failures",
+                    "--goal",
+                    "Reduce failures",
+                    "--scope",
+                    "src/**/*.py",
+                    "--metric-name",
+                    "failure count",
+                    "--direction",
+                    "lower",
+                    "--verify",
+                    "python3 -c pass",
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertIn("the following arguments are required: --workspace-root", completed.stderr)
+
     def test_create_launch_manifest_persists_required_stop_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)

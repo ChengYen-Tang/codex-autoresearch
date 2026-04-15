@@ -1379,7 +1379,7 @@ class AutoresearchResultsRowsTest(AutoresearchScriptsTestBase):
             )
 
             self.assertNotEqual(completed.returncode, 0)
-            self.assertIn("--workspace-root is required", completed.stderr)
+            self.assertIn("the following arguments are required: --workspace-root", completed.stderr)
             self.assertFalse((repo / "autoresearch-results").exists())
             self.assertFalse((workspace / "autoresearch-results").exists())
 
